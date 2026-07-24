@@ -30,10 +30,8 @@
 /**************************************************
  *
  * USED IN:
- * Loewenzahn 1 / 2 / 3 / 4 / 5 / 6 / 7 / 8 / Adventskalender / Spielebox
- * TKKG 4 / 7 / 8 / 9 / 10 / 11 / 13 / 14
+ * Standard Director Xtra
  * Oscar the Balloonist Discovers the Sea
- * Bioscopia / Biolab
  *
  **************************************************/
 
