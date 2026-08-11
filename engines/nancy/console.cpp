@@ -414,6 +414,11 @@ bool NancyConsole::Cmd_playSound(int argc, const char **argv) {
 		return true;
 	}
 
+	if (g_nancy->_sound->isCommonSound(argv[1])) {
+		g_nancy->_sound->playSound(argv[1]);
+		return true;
+	}
+
 	Common::File *f = new Common::File;
 	if (!f->open(Common::Path(argv[1]).appendInPlace(".his"))) {
 		debugPrintf("Failed to open '%s.his'\n", argv[1]);
@@ -707,6 +712,8 @@ bool NancyConsole::Cmd_actionRecordExport(int argc, const char **argv) {
 		Common::String desc(descBuf);
 		desc.replace('/', '-');
 		desc.replace('\\', '-');
+		desc.replace('>', '_');
+		desc.replace('<', '_');
 		byte ARType = chunk->readByte();
 		chunk->skip(1); // execType
 

@@ -30,6 +30,7 @@
 #include "mads/core/mouse.h"
 #include "mads/core/pal.h"
 #include "mads/core/video.h"
+#include "mads/nebular/nebular.h"
 #include "mads/nebular/popup.h"
 
 namespace MADS {
@@ -93,6 +94,9 @@ static int popup_draw_content(int x, int y, int xs, int ys, int unknown, byte co
 }
 
 void popup_draw() {
+	if (g_engine->drawPopup())
+		return;
+
 	int askY;
 
 	int y2 = box->y + box->ys;
@@ -128,14 +132,14 @@ void popup_draw() {
 					box->xs - 4, 1, DIALOG_BLACK_COLOR);
 			} else {
 				int tab = box->tab[lineCtr];
-				int xp = (tab & 0x7f) + box->x + 5;
+				int xp = (tab & ~(POPUP_UNDERLINE | POPUP_DOWNPIXEL)) + box->x + 5;
 				int yp = askY;
-				if (tab & 0x40)
+				if (tab & POPUP_DOWNPIXEL)
 					yp++;
 
 				font_write(box_param.font, &scr_main, box->text[lineCtr], xp, yp, 1);
 
-				if (tab & 0x80) {
+				if (tab & POPUP_UNDERLINE) {
 					buffer_rect_fill(scr_main, xp, yp + box_param.font->max_y_size,
 						font_string_width(box_param.font, box->text[lineCtr], 1), 1, DIALOG_BLACK_COLOR);
 				}

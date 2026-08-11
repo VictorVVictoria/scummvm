@@ -31,7 +31,6 @@
 #include "mads/core/kernel.h"
 #include "mads/core/matte.h"
 #include "mads/core/object.h"
-#include "mads/core/pal.h"
 #include "mads/core/rail.h"
 #include "mads/core/screen.h"
 #include "mads/core/sound.h"
@@ -41,10 +40,11 @@
 #include "mads/nebular/copy.h"
 #include "mads/nebular/global.h"
 #include "mads/nebular/main.h"
+#include "mads/nebular/mac_nebular.h"
 #include "mads/nebular/popup.h"
 #include "mads/nebular/mads/inventory.h"
 #include "mads/nebular/mads/words.h"
-#include "mads/nebular/sound_nebular.h"
+#include "mads/nebular/sound/sound.h"
 #include "mads/nebular/rooms/section1.h"
 #include "mads/nebular/rooms/section2.h"
 #include "mads/nebular/rooms/section3.h"
@@ -59,13 +59,28 @@ namespace RexNebular {
 
 RexNebularEngine::RexNebularEngine(OSystem *syst, const MADSGameDescription *gameDesc) :
 		MADSEngine(syst, gameDesc) {
+	if (getPlatform() == Common::kPlatformMacintosh)
+		_macNebular = new MacNebular(*this);
+
 	// Initialize globals
 	RexNebular::popup_init();
 }
 
+RexNebularEngine::~RexNebularEngine() {
+	delete _macNebular;
+}
+
 Common::Error RexNebularEngine::run() {
-	initGraphics(320, 200);
-	_screen = new Graphics::Screen();
+	if (_macNebular)
+		_macNebular->initGraphics();
+	else
+		initGraphics(320, 200);
+	applyGameSettings();
+
+	// The shared engine always renders into its original 320x200 work screen.
+	// Macintosh presentation expands the scene and supplies its independent
+	// native interface panel when the frame is sent to the backend.
+	_screen = new Graphics::Screen(320, 200);
 	scr_live.data = (byte *)_screen->getPixels();
 
 	// Create a debugger console
@@ -78,8 +93,14 @@ Common::Error RexNebularEngine::run() {
 			SearchMan.add("mpslabs", arch);
 	}
 
-	// Set up sound manager
-	_soundManager = new RexSoundManager(_mixer, _soundFlag);
+	// Set up the platform resource and sound providers
+	if (_macNebular) {
+		if (!_macNebular->initResources())
+			return Common::Error(Common::kNoGameDataFoundError,
+				"Could not open the Macintosh Rex resource files");
+	} else {
+		_soundManager = new Sound::RexSoundManager(_mixer, _soundFlag, isDemo());
+	}
 	_soundManager->validate();
 
 	// Run the game
@@ -576,11 +597,10 @@ void RexNebularEngine::global_error_code() {
 		if (!global[kTalkInanimateCount]) {
 			text_show(2);
 		} else {
-			Common::String tmpMsg = "\"Greetings, ";
-			tmpMsg += vocab_string(inter_main_noun);
-			tmpMsg += "!\"";
+			static char msg[32];
+			Common::sprintf_s(msg, "\"Greetings, %s!\"", vocab_string(inter_main_noun));
 			kernel_message_purge();
-			kernel_message_add(const_cast<char *>(tmpMsg.c_str()), 0, 0, 0x1110, 120, 34, 0);
+			kernel_message_add(msg, 0, 0, 0x1110, 120, 0, 34);
 		}
 	} else if (player_said_3(give, door, ceiling) || player_said_2(close, chair))
 		text_show(3);

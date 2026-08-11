@@ -18,6 +18,8 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
    - Unterstützung für Nancy Drew: The Secret of Shadow Ranch hinzugefügt.
    - Unterstützung für Nancy Drew: Curse of Blackmoor Manor hinzugefügt.
    - Unterstützung für Chamber of the Sci-Mutant Priestess hinzugefügt.
+   - Unterstützung für Star Wars: Rebel Assault hinzugefügt.
+   - Unterstützung für Star Wars: Rebel Assault II: The Hidden Empire hinzugefügt.
 
  Allgemein:
    - Zur Verbesserung der Perforamcen wurden die Audio-Mixer und -Konverter optimiert.
@@ -25,6 +27,9 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
    - Fehler korrigiert, durch den MIDI- und MT-32-Geräte in den Spiel-Optionen
      nicht überschrieben werden konnten
    - Der Nuked-OPL3 AdLib-Emulator wurden durch den Nuked-OPL3-fast-Fork ausgetauscht.
+
+ AWE:
+   - Absturz des Audio-Codes in OpenBSD korrigiert.
 
  Bagel:
    - Speicher-Optionen in Hodj n' Podj's Th Gesng Gme korrigiert.
@@ -36,9 +41,19 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
  Freescape:
    - Unterstützung für das Laden von ZX Spectrum-Spielen von TAP/TZX-Tape-Images hinzugefügt.
 
+ Kyra:
+   - Unterstützung für die koreanische Fan-Übersetzung in Kyra1 hinzugefügt (in ScummVM 2026.3.0).
+   - Fehlerhafte nicht-koreanische kyra1-Spiele (Fehlermeldung "You're missing the 'KYRA.DAT'
+     engine data file or it got corrupted...) wiederhergestellt.
+
  Lure:
    - Charakter-Wegfindung optimiert.
    - Fehler korrigiert, durch den Charaktere nach einer einseitigen Konversation nicht mehr angesprochen werden konnten.
+
+ M4:
+   - Mehrere Fehlerkorrekturen für Riddle of Master Lu, einschließlich Abstürzen, fehlender Funktionen und Spiel-Fehler.
+   - Fehler im Originalspiel korrigiert, der dafür sorgt, dass bei einer Unterhaltung mit Wolf das Spiel einfriert.
+   - Unterstützung für originale Cheat-Codes hinzugefügt.
 
  MM:
    - Mehrere Abstürze in Kämpfen in M&M1 korrigiert.
@@ -49,6 +64,7 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
      in M&M1.
    - Darstellung der Untertitel in Zwischensequenzen korrigiert.
    - Unterstützung für die französische Übersetzung von Xeen hinzugefügt.
+   - Die Stimme des Pharao wird im Intro von Dark Side of Xeen jetzt nicht wiederholt.
 
  NANCY:
    - Allgemeine Flags werden nicht mehr gelöscht, wenn das Spiel (automatisch) gespeichert

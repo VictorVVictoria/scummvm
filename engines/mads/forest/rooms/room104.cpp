@@ -23,10 +23,10 @@
 #include "mads/forest/mads/sounds.h"
 #include "mads/forest/mads/words.h"
 #include "mads/forest/rooms/section1.h"
-#include "mads/forest/digi.h"
+#include "mads/forest/sound/digi.h"
 #include "mads/forest/extra.h"
 #include "mads/forest/global.h"
-#include "mads/forest/midi.h"
+#include "mads/forest/sound/midi.h"
 #include "mads/core/game.h"
 #include "mads/core/imath.h"
 #include "mads/core/inter.h"
@@ -848,7 +848,10 @@ static void room_104_daemon() {
 
 	case 100:
 		kernel_abort_animation(aa[0]);
-		// TODO: word_79954 = 0;
+
+		// WORKAROUND: Nonsensical assignment from the original disabled
+		//room_510_array1[52].quote_id = 0;
+
 		global[g131] = -1;
 		global[g141] = -1;
 		kernel_reset_animation(scratch._9a, 1);

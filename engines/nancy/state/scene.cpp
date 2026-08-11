@@ -487,11 +487,9 @@ byte Scene::hasItem(int16 id) const {
 	} else if (id >= 0 && (uint)id < _flags.items.size()) {
 		return _flags.items[id];
 	} else {
-		// TODO: Happens in Nancy10+. Gets called for item IDs
-		// 1824, 1825, 1826, 1827, when adding tasks to the
-		// notebook, for an array of 70 items in total. Looks
-		// like a case where a flag is contained for the held
-		// item ID to be checked.
+		// Some scripts check for item IDs past the end of the inventory. The
+		// original reads those out of bounds and gets a zero, so reporting the
+		// item as missing matches it.
 		debug(2, "Scene::hasItem: out-of-range id %d (items.size=%u)", id,
 			  (uint)_flags.items.size());
 		return g_nancy->_false;
@@ -528,14 +526,49 @@ void Scene::installInventorySoundOverride(byte command, const SoundDescription &
 	}
 }
 
-void Scene::playItemCantSound(int16 itemID, bool notHoldingSound) {
-	if (ConfMan.getBool("subtitles") && g_nancy->getGameType() >= kGameTypeNancy2) {
-		_textbox.clear();
+// Nancy9 and newer no longer store the "can't" caption alongside the sound.
+// Instead, the caption is looked up in the CVTX text chunks by the played
+// sound's name: the narration/observations (AUTOTEXT) chunk is searched first,
+// then the conversation (CONVO) chunk. Games that predate the change have no
+// text chunks, so they always end up with the caption stored in the data.
+static Common::String getSoundSubtitle(const Common::String &soundName, const Common::String &fallback) {
+	if (!soundName.empty() && !soundName.equalsIgnoreCase("NO SOUND")) {
+		const CVTX *autotext = (const CVTX *)g_nancy->getEngineData("AUTOTEXT");
+		if (autotext) {
+			Common::String text = autotext->texts.getValOrDefault(soundName, "");
+			if (!text.empty()) {
+				return text;
+			}
+		}
+
+		const CVTX *convo = (const CVTX *)g_nancy->getEngineData("CONVO");
+		if (convo) {
+			Common::String text = convo->texts.getValOrDefault(soundName, "");
+			if (!text.empty()) {
+				return text;
+			}
+		}
 	}
 
+	return fallback;
+}
+
+void Scene::playItemCantSound(int16 itemID, bool notHoldingSound) {
 	// Improvement: nancy2 never shows the caption text, even though it exists in the data; we show it
 	auto *inventoryData = GetEngineData(INV);
 	assert(inventoryData);
+
+	// Nancy9 and newer play every "can't" sound on the same dedicated sound-effects
+	// channel as the default "can't" sound. If one is already playing, leave it (and
+	// the current caption) alone instead of restarting it or overlapping a new one.
+	if (g_nancy->getGameType() >= kGameTypeNancy9 &&
+			g_nancy->_sound->isSoundPlaying(inventoryData->cantSound.channelID)) {
+		return;
+	}
+
+	if (ConfMan.getBool("subtitles") && g_nancy->getGameType() >= kGameTypeNancy2) {
+		_textbox.clear();
+	}
 
 	if (itemID < 0) {
 		if (inventoryData->cantSound.name.size()) {
@@ -544,7 +577,8 @@ void Scene::playItemCantSound(int16 itemID, bool notHoldingSound) {
 			g_nancy->_sound->playSound(inventoryData->cantSound);
 
 			if (ConfMan.getBool("subtitles")) {
-				_textbox.addTextLine(inventoryData->cantText, inventoryData->captionAutoClearTime);
+				_textbox.addTextLine(getSoundSubtitle(inventoryData->cantSound.name, inventoryData->cantText),
+					inventoryData->captionAutoClearTime);
 			}
 		} else {
 			// TVD and nancy1 contain no sound data in INV, and have no captions
@@ -560,7 +594,10 @@ void Scene::playItemCantSound(int16 itemID, bool notHoldingSound) {
 				g_nancy->_sound->playSound(override.sound);
 
 				if (ConfMan.getBool("subtitles")) {
-					_textbox.addTextLine(override.caption, inventoryData->captionAutoClearTime);
+					// The caption is looked up in the CVTX text chunks by the
+					// override's sound name; the stored caption is the fallback
+					_textbox.addTextLine(getSoundSubtitle(override.sound.name, override.caption),
+						inventoryData->captionAutoClearTime);
 				}
 				return;
 			} else {
@@ -580,12 +617,15 @@ void Scene::playItemCantSound(int16 itemID, bool notHoldingSound) {
 					g_nancy->_sound->playSound(inventoryData->cantSound);
 
 					if (ConfMan.getBool("subtitles")) {
-						_textbox.addTextLine(inventoryData->cantText, inventoryData->captionAutoClearTime);
+						_textbox.addTextLine(getSoundSubtitle(inventoryData->cantSound.name, inventoryData->cantText),
+							inventoryData->captionAutoClearTime);
 					}
 				} else {
 					// Should be unreachable
 					g_nancy->_sound->playSound("CANT");
 				}
+
+				return;
 			}
 		}
 
@@ -597,13 +637,29 @@ void Scene::playItemCantSound(int16 itemID, bool notHoldingSound) {
 			SoundDescription cantSound = item.cantSound;
 			Common::String cantText = item.cantText;
 
-			// For Nancy9 and newer, we have multiple sounds to choose from,
-			// so randomly select one, if available
-			if (g_nancy->getGameType() >= kGameTypeNancy9 && !item.cantSounds[1].name.empty()) {
-				const uint maxSound = item.cantSounds[2].name.empty() ? 1 : 2;
-				uint soundIndex = g_nancy->_randomSource->getRandomNumber(maxSound);
-				cantSound = item.cantSounds[soundIndex];
-				cantText = item.cantTexts[soundIndex];
+			// Nancy9 and newer store up to three "can't" sound variants per item
+			// (the default in slot 0, plus two optional alternatives), but no longer
+			// store the playback settings or caption alongside them.
+			if (g_nancy->getGameType() >= kGameTypeNancy9) {
+				// Count the valid alternatives and pick one at random, including
+				// the default in slot 0
+				uint numChoices = 1;
+				while (numChoices < 3 && item.cantSounds[numChoices].name.size() &&
+						!item.cantSounds[numChoices].name.equalsIgnoreCase("NO SOUND")) {
+					++numChoices;
+				}
+
+				uint soundIndex = g_nancy->_randomSource->getRandomNumber(numChoices - 1);
+
+				// These sounds share the playback settings (channel, volume, ...) of
+				// the default "can't" sound, so they play on a sound-effects channel
+				// without cutting off the background music
+				cantSound = inventoryData->cantSound;
+				cantSound.name = item.cantSounds[soundIndex].name;
+
+				// The caption is looked up in the CVTX text chunks by the sound's
+				// name; the item's own caption field is only a fallback
+				cantText = getSoundSubtitle(cantSound.name, item.cantTexts[soundIndex]);
 			}
 
 			g_nancy->_sound->loadSound(cantSound);
@@ -618,7 +674,8 @@ void Scene::playItemCantSound(int16 itemID, bool notHoldingSound) {
 			g_nancy->_sound->playSound(inventoryData->cantSound);
 
 			if (ConfMan.getBool("subtitles")) {
-				_textbox.addTextLine(inventoryData->cantText, inventoryData->captionAutoClearTime);
+				_textbox.addTextLine(getSoundSubtitle(inventoryData->cantSound.name, inventoryData->cantText),
+					inventoryData->captionAutoClearTime);
 			}
 		} else {
 			// TVD and nancy1 contain no sound data in INV, and have no captions
@@ -902,7 +959,14 @@ void Scene::synchronize(Common::Serializer &ser) {
 
 	g_nancy->setTotalPlayTime((uint32)_timers.lastTotalTime);
 
-	ser.syncArray(_flags.eventFlags.data(), g_nancy->getStaticData().numEventFlags, Common::Serializer::Byte);
+	uint numSavedEventFlags = g_nancy->getStaticData().numEventFlags;
+	if (ser.getVersion() < 7 && g_nancy->getGameType() == kGameTypeNancy10) {
+		// Nancy10 saves made before version 7 were written with an event flag
+		// count of 816, before the correct count of 888 was established.
+		numSavedEventFlags = 816;
+	}
+
+	ser.syncArray(_flags.eventFlags.data(), numSavedEventFlags, Common::Serializer::Byte);
 
 	if (!ser.isSaving()) {
 		// Clear generic flags
@@ -1130,9 +1194,6 @@ void Scene::load(bool fromSaveFile) {
 		_specialEffects.front().onSceneChange();
 	}
 
-	clearSceneData();
-	g_nancy->_graphics->suppressNextDraw();
-
 	// Scene IDs are prefixed with S inside the cif tree; e.g 100 -> S100
 	Common::Path sceneName(Common::String::format("S%u", _sceneState.nextScene.sceneID));
 	IFF *sceneIFF = g_nancy->_resource->loadIFF(sceneName);
@@ -1160,6 +1221,16 @@ void Scene::load(bool fromSaveFile) {
 	}
 
 	delete sceneSummaryChunk;
+
+	// A "NO_ART_SCENE" carries no viewport art: it keeps the previous scene's
+	// frame on screen and only overlays new logic (used, for example, by
+	// phone-call conversations). Clearing it must preserve the previous scene's
+	// ambient character videos, so the scene type has to be known before the
+	// scene data is wiped.
+	const bool nextIsNoArt = _sceneState.summary.videoFile == "NO_ART_SCENE";
+
+	clearSceneData(nextIsNoArt);
+	g_nancy->_graphics->suppressNextDraw();
 
 	debugC(0, kDebugScene, "Loading new scene %i: description \"%s\", frame %i, vertical scroll %i, %s",
 				_sceneState.nextScene.sceneID,
@@ -1339,6 +1410,7 @@ void Scene::tickSoftwareTimers(uint32 deltaMs) {
 
 		timer.currentTimeMs += deltaMs;
 
+		// Nancy 11 single-config timers fire directly from the timer state
 		if ((timer.state == TimerData::Timer::kOneShot || timer.state == TimerData::Timer::kRepeating) &&
 			timer.durationMs > 0 && !timer.hasFired && timer.currentTimeMs >= timer.durationMs) {
 			fireSoftwareTimer(timer);
@@ -1349,6 +1421,27 @@ void Scene::tickSoftwareTimers(uint32 deltaMs) {
 			} else {
 				// Repeating timers keep counting up but will not fire again
 				timer.state = TimerData::Timer::kRunning;
+			}
+		}
+
+		// Nancy 12+ running timers fire from their triggers. A one-shot trigger
+		// clears the whole timer when it fires; a repeating one leaves it running.
+		if (timer.state == TimerData::Timer::kRunning) {
+			bool clearTimer = false;
+			for (uint j = 0; j < timer.triggers.size(); ++j) {
+				TimerData::Trigger &trigger = timer.triggers[j];
+				if (!trigger.hasFired && trigger.durationMs > 0 && timer.currentTimeMs >= trigger.durationMs) {
+					trigger.hasFired = true;
+					fireTimerTrigger(trigger);
+
+					if (trigger.type == TimerData::Trigger::kOneShot) {
+						clearTimer = true;
+					}
+				}
+			}
+
+			if (clearTimer) {
+				timer.reset();
 			}
 		}
 	}
@@ -1402,6 +1495,30 @@ void Scene::fireSoftwareTimer(TimerData::Timer &timer) {
 	}
 }
 
+void Scene::fireTimerTrigger(TimerData::Trigger &trigger) {
+	// Set the trigger's event flags
+	for (uint i = 0; i < ARRAYSIZE(trigger.flags); ++i) {
+		if (trigger.flags[i].label != kFlagNoLabel) {
+			setEventFlag(trigger.flags[i]);
+		}
+	}
+
+	// Play the trigger's sound
+	if (trigger.sound.name != "NO SOUND") {
+		g_nancy->_sound->loadSound(trigger.sound);
+		g_nancy->_sound->playSound(trigger.sound);
+	}
+
+	// Nancy 12+ triggers carry no inline caption; the subtitle is looked up from
+	// the played sound's name
+	if (ConfMan.getBool("subtitles", ConfMan.getActiveDomainName()) && trigger.sound.name != "NO SOUND") {
+		const CVTX *autotext = (const CVTX *)g_nancy->getEngineData("AUTOTEXT");
+		if (autotext && autotext->texts.contains(trigger.sound.name)) {
+			_textbox.addTextLine(autotext->texts[trigger.sound.name]);
+		}
+	}
+}
+
 Common::Rect Scene::activePopupConfinement() const {
 	// Pick the first visible Nancy 10+ popup; if more than one is open
 	// (shouldn't normally happen) the priority order matches the input
@@ -1418,6 +1535,13 @@ Common::Rect Scene::activePopupConfinement() const {
 	if (_cellPhonePopup.isVisible() && !_cellPhonePopup.isInCall())
 		return _cellPhonePopup.getScreenPosition();
 	return Common::Rect();
+}
+
+void Scene::closeActivePopups() {
+	if (_conversationPopup.isVisible()) _conversationPopup.close();
+	if (_inventoryPopup.isOpen())       _inventoryPopup.close();
+	if (_notebookPopup.isVisible())     _notebookPopup.close();
+	if (_cellPhonePopup.isVisible())    _cellPhonePopup.close();
 }
 
 void Scene::handleInput() {
@@ -1545,7 +1669,7 @@ void Scene::handleInput() {
 		// original); restored automatically once the popup closes.
 		_taskbar->setPopupLockout(popupOpen);
 	}
-	if (_taskbar && !_textbox.isFullMode() && !popupOpen) {
+	if (_taskbar && !_textbox.coversTaskbar() && !popupOpen) {
 		// MENU and HELP leave gameplay entirely, which would cut off the
 		// taskbar click sound. The original defers the transition until that
 		// sound finishes, so we hold the click here and only switch state
@@ -1723,7 +1847,7 @@ void Scene::initStaticData() {
 	_state = kLoad;
 }
 
-void Scene::clearSceneData() {
+void Scene::clearSceneData(bool nextIsNoArt) {
 	// Clear generic flags only
 	for (uint16 id : g_nancy->getStaticData().genericEventFlags) {
 		_flags.eventFlags[id] = g_nancy->_false;
@@ -1733,20 +1857,25 @@ void Scene::clearSceneData() {
 
 	// Stop a leftover random movie if the outgoing scene didn't include
 	// its own PSM(isRandom) AR (so it doesn't bleed into the next scene).
-	if (_activeMovie && _activeMovie->isPersistentAcrossScenes() && !_hadRandomMovieARThisScene) {
+	// A NO_ART_SCENE keeps the previous scene's ambient videos playing, so
+	// leave the active movie running in that case.
+	if (!nextIsNoArt && _activeMovie && _activeMovie->survivesSceneChange(false) && !_hadRandomMovieARThisScene) {
 		_activeMovie->stopRandom();
 	}
 	_hadRandomMovieARThisScene = false;
 
-	bool clearActiveMovie = _activeMovie && !_activeMovie->isPersistentAcrossScenes();
+	// The active movie is dropped unless it survives this change (a persistent
+	// ambient loop). When it survives, clearActionRecords keeps the record alive,
+	// so the pointer must be kept too; otherwise it is cleared to avoid dangling.
+	bool clearActiveMovie = _activeMovie && !_activeMovie->survivesSceneChange(nextIsNoArt);
 
-	_actionManager.clearActionRecords();
+	_actionManager.clearActionRecords(nextIsNoArt);
 
 	if (_lightning) {
 		_lightning->endLightning();
 	}
 
-	if (_textbox.hasBeenDrawn() || g_nancy->getGameType() >= kGameTypeNancy10) {
+	if (_textbox.hasBeenDrawn()) {
 		// Improvement: the dog portrait scenes in nancy7 queue a piece of text,
 		// then immediately change the scene. This makes the text disappear instantly;
 		// instead, we check if the textbox has been drawn, and don't clear it if it hasn't.

@@ -221,8 +221,6 @@ static void global_menu_score() {
 		text_index[2] = 7;          /* Star Player */
 	} else if (score <= 250) {
 		text_index[2] = 8;          /* Director */
-	} else {
-		text_index[2] = 9;          /* Bug Finder! */
 	}
 
 	text_show(99);
@@ -343,8 +341,8 @@ static void global_menu_save_restore(int save) {
 static void global_menu_options() {
 	int initial_1, initial_2, initial_3;
 	int initial_4, initial_5, initial_6;
-	int former_music;
-	int former_sound;
+	bool former_music;
+	bool former_sound;
 	PopupItem *music_item;
 	PopupItem *sound_item;
 	PopupItem *interface_item;

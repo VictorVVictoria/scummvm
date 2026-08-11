@@ -199,7 +199,7 @@ struct SegmentBuf {
 
 	int    speech;
 
-	word   misc[10];
+	int16  misc[10];
 
 	int    num_sprite_changes;
 	word   sprite_change_frame[AA_MAX_CHANGES];
@@ -312,7 +312,6 @@ struct Speech {
 	char text[60];                /* Text to be displayed     */
 	byte misc[3];                 /* 3 extra bonus bytes      */
 	byte sound;                   /* Sound to be used         */
-	Audio::AudioStream *speech;	  /* Speech audio stream      */
 	int16 x, y;                   /* Text coordinates         */
 	uint16 display_condition;     /* Condition for display    */
 	RGBcolor color[2];            /* Colors for text display  */
@@ -380,7 +379,7 @@ struct AnimFile {
 	uint16 font_auto_spacing;
 	uint16 background_type;                 /* black, or room, or whatever    */
 	uint16 background_room;                 /* room number to load            */
-	uint16 misc[10];                        /* see MISC_ defines above        */
+	int16 misc[10];                         /* see MISC_ defines above        */
 	char background_name[13];            /* if needed                      */
 	char series_name[AA_MAX_SERIES][13]; /* filenames for all your series  */
 	char sound_file_name[13];
@@ -432,7 +431,7 @@ int anim_load_background(AnimFile *anim_in,
 	TileMapHeader *depth_map,
 	TileResource *picture_resource,
 	TileResource *depth_resource,
-	RoomPtr *room,
+	RoomPtr *roomPtr,
 	CycleListPtr cycle_list,
 	int load_flags, int star_search);
 
@@ -445,7 +444,7 @@ AnimPtr anim_load(const char *file_name,
 	TileMapHeader *depth_map,
 	TileResource *picture_resource,
 	TileResource *depth_resource,
-	RoomPtr *room, CycleListPtr cycle_list,
+	RoomPtr *roomPtr, CycleListPtr cycle_list,
 	int load_flags);
 
 int anim_get_sound_info(const char *file_name, char *sound_file_buffer,

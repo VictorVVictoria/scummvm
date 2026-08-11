@@ -249,13 +249,6 @@ static int pal_get_new_flag() {
 		}
 	}
 
-	// If no handles left to allocate:
-	if (return_code < 0) {
-#ifndef disable_error_check
-		error_report(ERROR_NO_MORE_PALETTE_FLAGS, ERROR, MODULE_PAL, PAL_MAXFLAGS, 100);
-#endif
-	}
-
 done:
 	return return_code;
 }
@@ -480,7 +473,6 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 					found = true;
 					best_target_color = target_color;
 					*(RGBcolor *) &master_palette[target_color].r = *(RGBcolor *) & new_list->table[list_color].r;
-					// memcpy(&(master_palette[target_color].r), &(new_list->table[list_color].r), 3);
 				}
 			}
 		}
@@ -495,9 +487,7 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 		} else {
 			pal_manager_colors = new_list->num_colors;
 			pal_exec(pal_manager_update, 3);
-#ifndef disable_error_check
-			error_report(ERROR_NO_MORE_COLORS, ERROR, MODULE_PAL, new_list->num_colors, search_color);
-#endif
+
 			return_code = PAL_ERR_OUTOFCOLORS;
 			goto done;
 		}
@@ -607,9 +597,6 @@ int pal_get_color(RGBcolor color, int color_handle, int override_reserved, int *
 		}
 
 		if (result < 0) {
-#ifndef disable_error_check
-			error_report(ERROR_NO_MORE_PALETTE_FLAGS, ERROR, MODULE_PAL, PAL_MAXFLAGS, 1);
-#endif
 			return result;  // No flags left to allocate
 		}
 	} else {
@@ -643,9 +630,6 @@ int pal_get_color(RGBcolor color, int color_handle, int override_reserved, int *
 	}
 
 	if (!found) {
-#ifndef disable_error_check
-		error_report(ERROR_NO_MORE_COLORS, ERROR, MODULE_PAL, 1, 1);
-#endif
 		result = PAL_ERR_OUTOFCOLORS;
 	}
 

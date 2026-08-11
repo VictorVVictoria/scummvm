@@ -51,6 +51,7 @@
 #include "engines/nancy/action/puzzle/gridmappuzzle.h"
 #include "engines/nancy/action/puzzle/matchpuzzle.h"
 #include "engines/nancy/action/puzzle/hamradiopuzzle.h"
+#include "engines/nancy/action/puzzle/hangmanpuzzle.h"
 #include "engines/nancy/action/puzzle/leverpuzzle.h"
 #include "engines/nancy/action/puzzle/magnetmazepuzzle.h"
 #include "engines/nancy/action/puzzle/mazechasepuzzle.h"
@@ -64,6 +65,7 @@
 #include "engines/nancy/action/puzzle/orderingpuzzle.h"
 #include "engines/nancy/action/puzzle/overridelockpuzzle.h"
 #include "engines/nancy/action/puzzle/pachinkopuzzle.h"
+#include "engines/nancy/action/puzzle/paintpuzzle.h"
 #include "engines/nancy/action/puzzle/passwordpuzzle.h"
 #include "engines/nancy/action/puzzle/peepholepuzzle.h"
 #include "engines/nancy/action/puzzle/pegspuzzle.h"
@@ -277,7 +279,10 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		else
 			return new TableIndexSetValueHS();
 	case 68:
-		return new TextScroll(false);
+		if (g_nancy->getGameType() >= kGameTypeNancy12)
+			return new TextLineOverlay();
+		else
+			return new TextScroll(false);
 	case 69:	// Nancy11
 		return new TimerControl();
 	case 70:
@@ -288,7 +293,7 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		return new ModifyListEntry(ModifyListEntry::kDelete);
 	case 73:
 		return new ModifyListEntry(ModifyListEntry::kMark);
-	case 74:	// Nancy10
+	case 74:	// Nancy10 only: writes the full, taskbar-covering box
 		return new FrameTextBox(true);
 	case 75:
 		if (g_nancy->getGameType() <= kGameTypeNancy9)
@@ -502,9 +507,8 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 	case 176:
 		return new DropSortPuzzle();	// conveyor-belt candy sorting
 	// -- Nancy14 new puzzles (types 177-182) --
-	case 177:	// HangmanPuzzle
-		// TODO: not yet implemented
-		return nullptr;
+	case 177:
+		return new HangmanPuzzle();
 	case 178:	// AdjustPuzzle
 		// TODO: not yet implemented
 		return nullptr;
@@ -514,9 +518,8 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 	case 180:	// BlockingPuzzle
 		// TODO: not yet implemented
 		return nullptr;
-	case 181:	// PaintPuzzle
-		// TODO: not yet implemented
-		return nullptr;
+	case 181:
+		return new PaintPuzzle();
 	case 182:	// DecoderPuzzle
 		// TODO: not yet implemented
 		return nullptr;

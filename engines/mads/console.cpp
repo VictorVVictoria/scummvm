@@ -19,10 +19,14 @@
  *
  */
 
+#include "common/array.h"
 #include "mads/console.h"
+#include "mads/core/env.h"
 #include "mads/core/imath.h"
 #include "mads/core/kernel.h"
 #include "mads/core/matte.h"
+#include "mads/core/mem.h"
+#include "mads/core/text.h"
 
 namespace MADS {
 
@@ -30,6 +34,8 @@ Console::Console() : GUI::Debugger() {
 	registerCmd("depth", WRAP_METHOD(Console, cmdDepth));
 	registerCmd("teleport", WRAP_METHOD(Console, cmdTeleport));
 	registerCmd("walkable", WRAP_METHOD(Console, cmdWalkable));
+	registerCmd("quotes", WRAP_METHOD(Console, cmdQuotes));
+	registerCmd("text", WRAP_METHOD(Console, cmdText));
 }
 
 int strToInt(const char *s) {
@@ -73,6 +79,153 @@ bool Console::cmdTeleport(int argc, const char **argv) {
 
 		return false;
 	}
+}
+
+bool Console::cmdQuotes(int argc, const char **argv) {
+	bool showAll = (argc >= 2) && !strcmp(argv[1], "all");
+	int quoteId = -1;
+	if (showAll) {
+		if (argc >= 3)
+			quoteId = strToInt(argv[2]);
+	} else if (argc >= 2) {
+		quoteId = strToInt(argv[1]);
+	}
+
+	bool found = false;
+
+	if (showAll) {
+		// Stream the whole quotes.dat file directly rather than going through
+		// quote_load(): its scratch buffer is sized for a handful of in-scene
+		// quotes, not the whole game's quote table, and it needs the caller to
+		// already know which Ids to ask for. A quote's Id is simply its
+		// 1-based position in the file, so nothing needs to be kept around
+		// afterwards - the stream is closed once we're done reading it.
+		Common::SeekableReadStream *handle = env_open("*quotes.dat", "rb");
+		if (!handle) {
+			debugPrintf("Could not open quotes.dat\n");
+			return true;
+		}
+
+		for (int id = 1; ; ++id) {
+			Common::String quoteStr = handle->readString();
+			if (handle->eos())
+				break;
+
+			if (quoteId == -1) {
+				debugPrintf("%d: %s\n", id, quoteStr.c_str());
+			} else if (id == quoteId) {
+				debugPrintf("%d: %s\n", id, quoteStr.c_str());
+				found = true;
+				break;
+			}
+		}
+
+		delete handle;
+	} else {
+		if (!kernel.quotes) {
+			debugPrintf("No quotes are currently loaded.\n");
+			return true;
+		}
+
+		// A quote list is a run of null-terminated strings, each immediately
+		// followed by a 2-byte quote Id, with the run ending on an empty string.
+		// See quote_string() in core/quote.cpp for the canonical traversal.
+		char *marker, *search;
+		for (marker = kernel.quotes; *marker; marker = search + 2) {
+			for (search = marker; *search; search++)
+				;
+			search++;
+			int id = *((uint16 *)search);
+
+			if (quoteId == -1) {
+				debugPrintf("%d: %s\n", id, marker);
+			} else if (id == quoteId) {
+				debugPrintf("%d: %s\n", id, marker);
+				found = true;
+				break;
+			}
+		}
+	}
+
+	if (quoteId != -1 && !found)
+		debugPrintf("Quote %d not found.\n", quoteId);
+
+	return true;
+}
+
+static bool textBufferContains(const char *haystack, uint16 haystackLen, const char *needle) {
+	size_t needleLen = strlen(needle);
+	if (needleLen == 0 || haystackLen < needleLen)
+		return false;
+
+	for (uint16 i = 0; i + needleLen <= haystackLen; ++i) {
+		if (!scumm_strnicmp(haystack + i, needle, needleLen))
+			return true;
+	}
+
+	return false;
+}
+
+bool Console::cmdText(int argc, const char **argv) {
+	if (argc < 2) {
+		debugPrintf("Usage: %s <search string>\n", argv[0]);
+		return true;
+	}
+
+	Common::String search(argv[1]);
+	for (int i = 2; i < argc; ++i) {
+		search += ' ';
+		search += argv[i];
+	}
+
+	// Enumerate every Id in the compiled text file's directory table so each
+	// one can be individually decompressed via text_load() and searched.
+	// See text_load() in core/text.cpp for the canonical reader of this table.
+	char temp_buf[80];
+	Common::strcpy_s(temp_buf, text_filename);
+	Common::strcat_s(temp_buf, TEXT_COMPILED);
+
+	Common::SeekableReadStream *handle = env_open(temp_buf, "rb");
+	if (!handle) {
+		debugPrintf("Could not open %s\n", temp_buf);
+		return true;
+	}
+
+	word num_entries = handle->readUint16LE();
+	Common::Array<int32> ids;
+	for (int count = 0; count < num_entries; ++count) {
+		TextDirectory dir;
+		dir.load(handle);
+		ids.push_back(dir.id);
+	}
+
+	delete handle;
+
+	bool found = false;
+	for (uint i = 0; i < ids.size(); ++i) {
+		TextPtr text = text_load(ids[i]);
+		if (!text)
+			continue;
+
+		if (textBufferContains(text->text, text->length, search.c_str())) {
+			found = true;
+
+			Common::String display(text->text, text->length);
+			for (uint j = 0; j < display.size(); ++j) {
+				if (display[j] == '\0')
+					display[j] = '\n';
+			}
+
+			debugPrintf("--- %d ---\n%s\n\n", ids[i], display.c_str());
+		}
+
+		mem_free(text);
+	}
+
+	if (!found)
+		debugPrintf("No text entries contain \"%s\"\n", search.c_str());
+
+	return true;
 }
 
 bool Console::cmdWalkable(int argc, const char **argv) {

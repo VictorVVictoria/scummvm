@@ -80,7 +80,8 @@ struct BSUM : public EngineData {
 	uint16 horizontalEdgesSize;
 	uint16 verticalEdgesSize;
 
-	uint16 numFonts;
+	// Nancy16 switched to system fonts, and no longer stores a count here
+	uint16 numFonts = 0;
 
 	uint16 playerTimeMinuteLength;
 	uint16 buttonPressTimeDelay;
@@ -182,6 +183,7 @@ struct TBOX : public EngineData {
 	int32 maxScrollWidth = 0;
 	int32 firstLineY = 0; // added to the y-cursor when starting a new line
 	uint16 lineStartXCursor = 0; // left inset of the text within the text area
+	uint16 stripRightMargin = 0; // subtracted from contentWidth for the strip's text width
 	int32 unknown1 = 0;
 	int32 unknown2 = 0;
 	int32 contentWidth = 0;
@@ -553,7 +555,9 @@ struct TASK : public EngineData {
 	Common::Rect srcRect;
 	Common::Rect dstRect;
 	Common::Rect unkRect1;
-	Common::Rect unkRect2;
+	// Screen rect of the closed-caption text strip the taskbar draws (the
+	// ScrollTextBox's mini strip is positioned to it).
+	Common::Rect ccTextboxScreenRect;
 
 	ButtonRecord buttons[kNumButtons];
 };
@@ -872,6 +876,7 @@ struct PCUI : public EngineData {
 	PCUI(Common::SeekableReadStream *chunkStream);
 
 	byte flag = 0;
+	Common::Path uiName;					// Nancy 16+, e.g. "UI_Main"
 	Common::Array<Character> characters;	// indexed by the on-disk slot byte
 };
 
@@ -894,6 +899,25 @@ struct PUIH : public EngineData {
 	byte flag = 0;
 	Common::String themeName;	// e.g. "Nancy Classic Look (Default)"
 	Common::String swatchImageName;	// e.g. "UI_Swatch_ND"
+
+	// Nancy 16+. Names of the IFFs describing the journal and task list popups
+	Common::Path journalPrepName;	// e.g. "Journal_Prep"
+	Common::Path tasklistPrepName;	// e.g. "Tasklist_Prep"
+};
+
+// Task list sounds. Introduced in Nancy 16 (per-character boot). Holds two
+// banks of interchangeable sound names, sharing a channel, loop count and volume.
+struct TSKL : public EngineData {
+	struct SoundBank {
+		Common::Array<Common::Path> soundNames;
+		uint16 channelID = 0;
+		uint32 numLoops = 0;
+		uint16 volume = 0;
+	};
+
+	TSKL(Common::SeekableReadStream *chunkStream);
+
+	SoundBank soundBanks[2];
 };
 
 // Player-UI random-sound bank. Introduced in Nancy 15 (per-character boot).

@@ -39,7 +39,7 @@
 #include "mads/dragonsphere/dragonsphere.h"
 #include "mads/dragonsphere/global.h"
 #include "mads/dragonsphere/main.h"
-#include "mads/dragonsphere/sound_dragonsphere.h"
+#include "mads/dragonsphere/sound/sound.h"
 #include "mads/dragonsphere/rooms/section1.h"
 #include "mads/dragonsphere/rooms/section2.h"
 #include "mads/dragonsphere/rooms/section3.h"
@@ -71,7 +71,7 @@ Common::Error DragonsphereEngine::run() {
 	}
 
 	// Set up sound manager
-	_soundManager = new DragonSoundManager(_mixer, _soundFlag, isDemo());
+	_soundManager = new Sound::DragonSoundManager(_mixer, _soundFlag, isDemo());
 	_soundManager->validate();
 
 	// Run the game
@@ -86,8 +86,6 @@ void DragonsphereEngine::global_init_code() {
 	for (count = 0; count < GLOBAL_LIST_SIZE; count++) {
 		global[count] = 0;
 	}
-
-	/* initialize_grid (); */
 
 	global[grid_position] = 5;
 	global[grid_position + 1] = 4;

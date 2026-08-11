@@ -20,10 +20,10 @@
  */
 
 #include "common/config-manager.h"
-#include "gui/saveload.h"
 #include "mads/nebular/main.h"
 #include "mads/animview/animview.h"
 #include "mads/textview/textview.h"
+#include "mads/core/config.h"
 #include "mads/core/env.h"
 #include "mads/core/error.h"
 #include "mads/core/fileio.h"
@@ -45,22 +45,101 @@
 #include "mads/core/timer.h"
 #include "mads/core/video.h"
 #include "mads/nebular/main_menu.h"
+#include "mads/nebular/mac_menus.h"
 #include "mads/nebular/menus.h"
 #include "mads/mads.h"
 
 namespace MADS {
 namespace RexNebular {
 
-constexpr bool SHOW_LINES = true;
 constexpr byte LINE_COLOR = 2;
 
 char *quotes;
 static Palette black_palette;
 
+static void show_exit_advert(Palette &palette) {
+	int screenId;
+	int soundId;
+	int soundSection;
+
+	buffer_free(&scr_depth);
+	buffer_free(&scr_orig);
+	buffer_free(&scr_work);
+
+	if (imath_random(1, 1000) > 500) {
+		screenId = 996;
+		soundSection = 7;
+		soundId = 9;
+	} else {
+		screenId = 995;
+		soundSection = 4;
+		soundId = 12;
+	}
+
+	pal_init(1, 8);
+
+	room = room_load(screenId, 0, nullptr, &scr_orig, &scr_depth, &scr_walk,
+		&scr_special, &picture_map, &depth_map, &picture_resource,
+		&depth_resource, -1, -1, 0);
+	assert(room);
+
+	mouse_hide();
+	video_update(&scr_orig, 0, 0, 0, 0, 320, 200);
+
+	g_engine->_soundManager->init(soundSection);
+	sound_queue(soundId);
+
+	magic_fade_from_grey(palette, master_palette, 0, 256, 0, 1, 1, 16);
+
+	mouse_init_cycle();
+	bool flag1 = true;
+	bool flag2 = false;
+	long time = timer_read();
+
+	while (!g_engine->shouldQuit() && flag1) {
+		mouse_begin_cycle(false);
+
+		if (keys_any()) {
+			keys_get();
+			flag1 = false;
+			flag2 = true;
+		}
+
+		long elapsed = timer_read() - time;
+		if (elapsed > 900)
+			flag1 = false;
+
+		if (mouse_stop_stroke) {
+			flag1 = false;
+			flag2 = true;
+		}
+
+		mouse_end_cycle(false, true);
+	}
+
+	sound_queue(1);
+
+	if (flag2) {
+		memset(&master_palette, 0, sizeof(master_palette));
+		mcga_setpal(&master_palette);
+	} else {
+		magic_fade_to_grey(master_palette, nullptr, 0, 256, 0, 1, 1, 16);
+	}
+
+	kernel_unload_sound_driver();
+
+	keys_remove();
+	timer_remove();
+	mouse_hide();
+
+	mouse_init(0, 3);
+	video_init(3, -1);
+	mcga_reset();
+}
+
 static void main_menu_main() {
 	auto &scr_screen = *g_engine->getScreen();
 	Palette palette;
-	int screenId, soundId;
 
 	mcga_compute_retrace_parameters();
 	memset(&black_palette, 0, sizeof(black_palette));
@@ -116,90 +195,17 @@ static void main_menu_main() {
 
 	kernel_unload_sound_driver();
 
-	if (selected_item == 5) {
-		buffer_free(&scr_depth);
-		buffer_free(&scr_orig);
-		buffer_free(&scr_work);
+	if (selected_item == 5)
+		show_exit_advert(palette);
 
-		int sectionNum = 7;
-		if (imath_random(1, 1000) > 500) {
-			screenId = 996;
-			soundId = 9;
-		} else {
-			screenId = 995;
-			sectionNum = 4;
-			soundId = 12;
-		}
+	keys_remove();
+	timer_remove();
+	mouse_hide();
 
-		pal_init(1, 8);
-
-		room = room_load(screenId, 0, nullptr, &scr_orig, &scr_depth, &scr_walk,
-			&scr_special, &picture_map, &depth_map, &picture_resource,
-			&depth_resource, -1, -1, 0);
-
-		if (room) {
-			mouse_hide();
-			video_update(&scr_orig, 0, 0, 0, 0, 320, 200);
-
-			g_engine->_soundManager->init(sectionNum);
-			sound_queue(soundId);
-
-			magic_fade_to_grey(master_palette, (byte *)&palette, 0, 256, 0, 1, 1, 16);
-
-			mouse_init_cycle();
-			bool flag1 = true;
-			bool flag2 = false;
-			long time = timer_read();
-
-			while (!g_engine->shouldQuit() && flag1) {
-				mouse_begin_cycle(false);
-
-				if (keys_any()) {
-					keys_get();
-					flag1 = false;
-					flag2 = true;
-				}
-
-				long elapsed = timer_read() - time;
-				if (elapsed > 900)
-					flag1 = false;
-
-				if (mouse_stop_stroke) {
-					flag1 = false;
-					flag2 = true;
-				}
-
-				mouse_end_cycle(false, true);
-			}
-
-			sound_queue(1);
-
-			if (flag2) {
-				memset(&master_palette, 0, sizeof(master_palette));
-				mcga_setpal(&master_palette);
-			} else {
-				magic_fade_to_grey(master_palette, nullptr, 0, 256, 0, 1, 1, 16);
-			}
-
-			kernel_unload_sound_driver();
-
-			keys_remove();
-			timer_remove();
-			mouse_hide();
-
-			mouse_init(0, 3);
-			video_init(3, -1);
-			mcga_reset();
-		}
-	} else {
-		keys_remove();
-		timer_remove();
-		mouse_hide();
-
-		mouse_init(0, 3);
-		video_init(3, -1);
-		mcga_reset();
-	}
+	mouse_init(0, 3);
+	video_init(3, -1);
+	mcga_reset();
+	mcga_setpal(&black_palette);
 
 	buffer_free(&scr_depth);
 	buffer_free(&scr_orig);
@@ -210,7 +216,8 @@ static void main_cold_data_init() {
 	debugger_reset = game_debugger_reset;
 	debugger_update = game_debugger;
 
-	game_menu_routine = global_game_menu;
+	game_menu_routine = g_engine->getPlatform() == Common::kPlatformMacintosh ?
+		macintoshGameMenu : global_game_menu;
 	game_menu_init = global_menu_system_init;
 	game_menu_exit = global_menu_system_shutdown;
 	game_emergency_save = global_emergency_save;
@@ -219,7 +226,7 @@ static void main_cold_data_init() {
 	Common::strcpy_s(save_game_key, "rex");
 	Common::strcpy_s(restart_game_key, "rex");
 
-	Common::strcpy_s(player.series_name, "RAL");
+	*player.series_name = '\0';
 	player.walker_must_reload = true;
 	player.walker_loads_first = false;
 	player.walker_visible = true;
@@ -241,7 +248,7 @@ static void game_main(int argc, const char **argv) {
 	mads_mode = env_verify();
 
 	new_section = 1;
-	new_room = 101;
+	new_room = g_engine->isDemo() ? 102 : 101;
 	player.x = 160;
 	player.y = 78;
 
@@ -249,7 +256,9 @@ static void game_main(int argc, const char **argv) {
 
 	game_cold_data_init();
 	main_cold_data_init();
-	g_engine->readConfigFile();
+	if (g_engine->getPlatform() == Common::kPlatformMacintosh &&
+			!ConfMan.hasKey("save_slot"))
+		selectMacintoshDifficulty();
 	global_load_config_parameters();
 
 	if (argc >= 2) {
@@ -289,18 +298,12 @@ static void game_main(int argc, const char **argv) {
 	game_control();
 
 done:
+	// Handle updating config settings
 	global_unload_config_parameters();
 
-	if (fileio_exist("config.for")) {
-		global_write_config_file();
-	}
-	if (chain_flag && (win_status || force_chain) && (key_abort_level < 2)) {
-		warning("TODO: chain_execute");
-	} else {
-		if (win_status) {
-			debug("(Ending: %d)", win_status);
-		}
-	}
+	if (win_status == WIN_ALL_THE_MONEY)
+		config_file.quotes_enabled = true;
+	global_write_config_file();
 }
 
 void nebular_main() {
@@ -311,10 +314,19 @@ void nebular_main() {
 	if (!env_verify())
 		env_search_mode = ENV_SEARCH_CONCAT_FILES;
 
-	if (ConfMan.getBool("start_game") || ConfMan.hasKey("save_slot"))
+	g_engine->readConfigFile();
+
+	if (g_engine->getPlatform() == Common::kPlatformMacintosh)
+		// FIXME: The Macintosh application has a native resource-based
+		// outer menu, not the DOS MADS menu and playlist files used below.
+		// The ScummVM launcher provides that outer-menu boundary.
 		selected_item = 0;
+	else if (ConfMan.getBool("start_game") || ConfMan.hasKey("save_slot"))
+		selected_item = 0;
+	else if (g_engine->isDemo())
+		selected_item = 9;
 	else if (ConfMan.getBool("start_intro"))
-		selected_item = 3;
+		selected_item = 2;
 	else
 		selected_item = -1;
 
@@ -336,7 +348,13 @@ void nebular_main() {
 		case 0:
 			// Start Game
 			game_main(2, CMD_LINE);
-			return;
+
+			if (win_status != WIN_NOTHING) {
+				selected_item = win_status + 16;
+			} else {
+				return;
+			}
+			break;
 
 		case 1: {
 			// Resume savegame
@@ -368,21 +386,31 @@ void nebular_main() {
 			selected_item = -1;
 			break;
 
-		case 17:
-			// Endgame cutscene
-			AnimView::animview_main("@rexend1");
-			AnimView::animview_main("@rexend2");
-			AnimView::animview_main("@rexend3");
-			TextView::textview_main("ending4");
-			selected_item = -1;
+		case 9:
+			// The DOS demo batch file plays this ANIMVIEW playlist before
+			// starting its three-room playable section.
+			AnimView::animview_main("@demodisk");
+			selected_item = 0;
 			break;
 
-		case 33:
+		case WIN_QUICK_DEATH + 16:
+			AnimView::animview_main("@rexend1");
 			TextView::textview_main("ending1");
+			return;
+
+		case WIN_SLOW_DEATH + 16:
+			AnimView::animview_main("@rexend2");
 			TextView::textview_main("ending2");
+			return;
+
+		case WIN_ALL_THE_MONEY + 16:
+			AnimView::animview_main("@rexend3");
 			TextView::textview_main("credits");
-			selected_item = -1;
-			break;
+			return;
+
+		case WIN_A_HEAD_POW + 16:
+			TextView::textview_main("ending4");
+			return;
 
 		case 5:
 		default:

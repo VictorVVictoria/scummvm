@@ -197,12 +197,15 @@ MODULE_OBJS = \
 	lingo/xtras/d/datetime.o \
 	lingo/xtras/d/directsound.o \
 	lingo/xtras/d/displayres.o \
+	lingo/xtras/f/fileflex.o \
+	lingo/xtras/f/fileutil.o \
 	lingo/xtras/f/filextra.o \
 	lingo/xtras/f/filextra4.o \
 	lingo/xtras/g/getdir.o \
 	lingo/xtras/g/glu32.o \
 	lingo/xtras/k/keypoll.o \
 	lingo/xtras/m/masterapp.o \
+	lingo/xtras/m/mbox.o \
 	lingo/xtras/m/mui.o \
 	lingo/xtras/n/netlingo.o \
 	lingo/xtras/o/openurl.o \
@@ -230,6 +233,7 @@ MODULE_OBJS += \
 	debugger/dt-cast.o \
 	debugger/dt-castdetails.o \
 	debugger/dt-controlpanel.o \
+	debugger/dt-help.o \
 	debugger/dt-lists.o \
 	debugger/dt-save-state.o \
 	debugger/dt-score.o \

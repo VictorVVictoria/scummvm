@@ -39,13 +39,8 @@
 #include "mads/core/video.h"
 #include "mads/core/anim.h"
 #include "mads/core/matte.h"
-#ifndef disable_error_check
-#include "mads/core/error.h"
-#endif
 
 namespace MADS {
-
-#define word_align_mattes
 
 /* Global data structures */
 
@@ -139,11 +134,6 @@ int matte_allocate_series(SeriesPtr series, int bonus_series_number) {
 			series_list[handle] = series;
 		}
 	}
-#ifndef disable_error_check
-	if (handle < 0) {
-		error_report(ERROR_SERIES_LIST_FULL, ERROR, MODULE_MATTE, SERIES_LIST_SIZE, 0);
-	}
-#endif
 
 	return handle;
 }
@@ -185,7 +175,6 @@ int matte_load_series(const char *name, int load_flags, int bonus_series_number)
 	}
 
 	if (!found) {
-
 		series = sprite_series_load(name, load_flags);
 		if (series == NULL) {
 			goto done;
@@ -221,13 +210,8 @@ void matte_deallocate_series(int id, int free_memory) {
 
 	// Protect against memory fragmentation
 	if (id < SERIES_LIST_SIZE) {
-		if (id == series_list_marker - 1) {
+		if (id == series_list_marker - 1)
 			series_list_marker--;
-		} else {
-#ifndef disable_error_check
-			error_report(ERROR_WRONG_SERIES_UNLOAD_ORDER, WARNING, MODULE_MATTE, id, series_list_marker);
-#endif
-		}
 	}
 
 done:
@@ -254,9 +238,6 @@ int matte_allocate_image() {
 	int result;
 
 	if (image_marker >= IMAGE_LIST_SIZE) {
-#if !defined(disable_error_check)
-		error_report(ERROR_IMAGE_LIST_FULL, ERROR, MODULE_MATTE, IMAGE_LIST_SIZE, image_marker);
-#endif
 		result = -1;
 	} else {
 		result = image_marker++;
@@ -293,13 +274,7 @@ int matte_add_message(FontPtr font, char *text, int x, int y, int message_color,
 			message_list[message_handle].active = true;
 		}
 	}
-#ifndef disable_error_check
-#ifndef disable_minor_error
-	if (message_handle < 0) {
-		error_report(ERROR_MESSAGE_LIST_FULL, ERROR, MODULE_MATTE, MESSAGE_LIST_SIZE, 0);
-	}
-#endif
-#endif
+
 	return message_handle;
 }
 
@@ -310,7 +285,6 @@ void matte_clear_message(int handle) {
 void bound_matte(MattePtr matte, int xs, int ys, int maxx, int maxy) {
 	int x2, y2;
 
-#if defined(word_align_mattes)
 	if (matte->x & 1) {
 		matte->x -= 1;
 		xs++;
@@ -318,7 +292,6 @@ void bound_matte(MattePtr matte, int xs, int ys, int maxx, int maxy) {
 	if (xs & 1) {
 		xs++;
 	}
-#endif
 
 	x2 = matte->x + xs - 1;  // Determine right most point
 	matte->x = MAX(0, matte->x);  // Scale coordinates to work
@@ -688,7 +661,18 @@ void matte_frame(int special_effect, int full_screen) {
 					y -= (sprite->ys - 1);
 				}
 
-				if ((image->depth <= 1) && !matte_guard_depth_0) {
+				if (g_engine->getGameID() == GType_RexNebular) {
+					if (image->depth <= 1)
+						sprite_draw(series_list[image->series_id], image->sprite_id,
+							&scr_orig, x, y);
+					else if (!matte_guard_depth_0)
+						sprite_draw_3d_x16(series_list[image->series_id],
+							image->sprite_id, &scr_orig, &scr_depth, x, y, image->depth);
+					else
+						sprite_draw_3d_big(series_list[image->series_id], image->sprite_id,
+							&scr_orig, &scr_depth, x, y, image->depth, 0, 0);
+
+				} else if ((image->depth <= 1) && !matte_guard_depth_0) {
 					sprite_draw(series_list[image->series_id], image->sprite_id,
 						&scr_orig,
 						x - picture_map.pan_base_x,
@@ -831,6 +815,12 @@ void matte_frame(int special_effect, int full_screen) {
 		if (image_list[id2].series_id == (byte)-1)
 			continue;
 
+		// WORKAROUND: Only allow sprites within limits, avoiding crash in Dragonsphere
+		// Hightower cutscene when attacking monster, and Rex intro
+		const SeriesPtr s = series_list[image_list[id2].series_id];
+		if (image_list[id2].sprite_id > s->num_sprites)
+			continue;
+
 		// Draw the sprite into the work buffer at the appropriate depth
 		if (image_list[id2].scale >= 100) {
 			if (image_list[id2].scale == IMAGE_UNSCALED) {
@@ -842,19 +832,15 @@ void matte_frame(int special_effect, int full_screen) {
 				y = image_list[id2].y - picture_map.pan_y - (sprite->ys - 1);
 			}
 			if ((image_list[id2].depth <= 1) && !matte_guard_depth_0) {
-				// WORKAROUND: Only allow sprites within limits, avoiding crash in Dragonsphere
-				// Hightower cutscene when attacking monster
-				SeriesPtr s = series_list[image_list[id2].series_id];
-				if (image_list[id2].sprite_id <= s->num_sprites)
-					sprite_draw(series_list[image_list[id2].series_id],
-						image_list[id2].sprite_id,
-						&scr_work, x, y);
+				sprite_draw(series_list[image_list[id2].series_id],
+					image_list[id2].sprite_id,
+					&scr_work, x, y);
 			} else {
 				sprite_draw_3d_big(series_list[image_list[id2].series_id],
 					image_list[id2].sprite_id,
 					&scr_work, &scr_depth,
 					x, y,
-					image_list[id2].depth,
+					(int8)image_list[id2].depth,
 					picture_map.pan_offset_x,
 					picture_map.pan_offset_y);
 			}
@@ -864,7 +850,7 @@ void matte_frame(int special_effect, int full_screen) {
 				&scr_work, &scr_depth,
 				image_list[id2].x - picture_map.pan_x,
 				image_list[id2].y - picture_map.pan_y,
-				image_list[id2].depth,
+				(int8)image_list[id2].depth,
 				image_list[id2].scale,
 				picture_map.pan_offset_x,
 				picture_map.pan_offset_y);
@@ -983,9 +969,6 @@ int matte_allocate_inter_image() {
 	int result;
 
 	if (image_inter_marker >= IMAGE_INTER_LIST_SIZE) {
-#if !defined(disable_error_check)
-		error_report(ERROR_IMAGE_INTER_LIST_FULL, ERROR, MODULE_MATTE, IMAGE_INTER_LIST_SIZE, image_inter_marker);
-#endif
 		result = -1;
 	} else {
 		result = image_inter_marker++;
@@ -1152,7 +1135,7 @@ void matte_inter_frame(int update_live, int clear_chaff) {
 					x = image->x - (series->index[which - 1].xs >> 1);
 					y = image->y - (series->index[which - 1].ys - 1);
 					sprite_draw_interface(series,
-						which | mirror,
+						static_cast<int16>(which | mirror),
 						&scr_inter,
 						x, y);
 				}

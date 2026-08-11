@@ -52,8 +52,6 @@
 
 namespace MADS {
 
-#define disable_error_check
-
 int stroke_type = STROKE_NONE;          /* Current stroke type           */
 
 int inter_auxiliary_click;              /* Clicks during downtime        */
@@ -139,6 +137,7 @@ int  picked_word = 0;           /* Word most recently picked.         */
 
 char inter_sentence[64];                /* Sentence building buffer            */
 int  inter_sentence_handle = -1;       /* Sentence message handle (for matte) */
+static int inter_sentence_shadow_handle = -1;
 int  inter_sentence_changed = false;    /* Mark if sentence contents changed   */
 
 int  inter_look_around;                 /* "Look around" command            */
@@ -246,6 +245,7 @@ void init_inter() {
 	picked_word = 0;
 	memset(inter_sentence, 0, sizeof(inter_sentence));
 	inter_sentence_handle = -1;
+	inter_sentence_shadow_handle = -1;
 	inter_sentence_changed = false;
 	inter_look_around = 0;
 	inter_command = 0;
@@ -320,7 +320,6 @@ static int inter_get_spot(int class_, int id, int *x1, int *y1, int *xs, int *ys
 	valid_flag = false;
 
 	switch (class_) {
-
 	case STROKE_COMMAND:
 		row = id % inter_columns;
 		col = id / inter_columns;
@@ -485,7 +484,7 @@ static void inter_show_word(int class_, int id) {
 		} else {
 			inter_set_colors(LEFT_SELECT);
 		}
-		font_write(font_misc, &scr_inter, temp_buf, x, y, 0);
+		font_write(font_misc ? font_misc : font_inter, &scr_inter, temp_buf, x, y, 0);
 		goto done;
 		break;
 
@@ -539,26 +538,30 @@ static void inter_show_all_inven() {
  * work buffer.
  */
 static void inter_show_all_actions() {
-	int count;
+	int count, id;
 
 	if (active_inven >= 0) {
 		for (count = 0; count < (int)object[inven[active_inven]].num_verbs; count++) {
-			inter_show_word(STROKE_ACTION, count);
-#if 0
-			int id = object[inven[active_inven]].vocab_id;
-			id = object_named(id);
-			// id = object[inven[active_inven]].verb[count].count;
-			if (id == 8) {  // pid doll
-				if (global[86]) {  // heal_verbs_visible
-					inter_show_word(STROKE_ACTION, count);
-				} else if (count == 0) {
+			if (g_engine->getGameID() == GType_Dragonsphere) {
+				// Special handling for Pid Doll
+				id = object[inven[active_inven]].vocab_id;
+				id = object_named(id);
+
+				if (id == Dragonsphere::pid_doll) {
+					if (global[Dragonsphere::heal_verbs_visible]) {
+						// heal_verbs_visible
+						inter_show_word(STROKE_ACTION, count);
+					} else if (count == 0) {
+						inter_show_word(STROKE_ACTION, count);
+					}
+
+				} else {
 					inter_show_word(STROKE_ACTION, count);
 				}
-
 			} else {
+				// All other games
 				inter_show_word(STROKE_ACTION, count);
 			}
-#endif
 		}
 	}
 }
@@ -596,12 +599,6 @@ void inter_prepare_background() {
 }
 
 static void inter_refresh() {
-	// int count;
-	// for (count = 0; count < (int)image_inter_marker; count++) {
-	// if (image_inter_list[count].segment_id == INTER_SPINNING_OBJECT) {
-	// image_inter_list[count].flags = IMAGE_REFRESH + IMAGE_UPDATE_ONLY;
-	// }
-	// }
 	image_inter_marker = 0;
 	matte_refresh_inter();
 
@@ -674,12 +671,6 @@ static void inter_update(int x1, int y1, int xs, int ys) {
 		x1 + inter_base_x, y1a,
 		xs, ys);
 
-#ifdef sixteen_colors
-	if (video_mode == ega_mode) {
-		video_flush_ega(y1a, (y1a + ys - 1));
-	}
-#endif
-
 	if (refresh_flag) mouse_refresh_done();
 	mouse_thaw();
 }
@@ -695,11 +686,6 @@ static void inter_image(int x1, int y1, int xs, int ys) {
 		image_inter_list[image_inter_marker].series_id = (byte)ys;
 		image_inter_marker++;
 	}
-#ifndef disable_error_check
-	else {
-		error_report(ERROR_IMAGE_INTER_LIST_FULL, WARNING, MODULE_INTER, IMAGE_INTER_LIST_SIZE, 1);
-	}
-#endif
 }
 
 static void inter_scrollbar_refresh() {
@@ -812,11 +798,6 @@ void inter_set_active_inven(int new_active) {
 						image_inter_list[image_inter_marker].series_id = (byte)ys;
 						image_inter_marker++;
 					}
-#ifndef disable_error_check
-					else {
-						error_report(ERROR_IMAGE_INTER_LIST_FULL, WARNING, MODULE_INTER, IMAGE_INTER_LIST_SIZE, 2);
-					}
-#endif
 
 					matte_inter_frame(false, false);
 
@@ -1073,7 +1054,7 @@ static void inter_select_word() {
 	int mode;
 	int limit = 0;
 	int strict, delta;
-	int tight_boxes;
+	int tight_boxes = 0;
 	int difference = 0;
 	int *selection;
 	int base_spot, this_spot;
@@ -1089,8 +1070,8 @@ static void inter_select_word() {
 		if (mouse_button && (right_action >= 0)) {
 			inter_set_active_word(STROKE_ACTION, &right_action, -1);
 		}
-		// tight_boxes = (end_of_selection && !mouse_button);
-		tight_boxes = true;
+
+		tight_boxes = (g_engine->getGameID() != GType_RexNebular) ? 1 : (end_of_selection && !mouse_button) ? 1 : 0;
 		break;
 
 	case STROKE_INVEN:
@@ -1100,8 +1081,9 @@ static void inter_select_word() {
 		strict = 0;
 		delta = first_inven;
 		selection = &left_inven;
-		// tight_boxes = (end_of_selection && ((!mouse_any_stroke) || !(inter_awaiting == AWAITING_COMMAND)));
-		tight_boxes = true;
+
+		tight_boxes = (g_engine->getGameID() != GType_RexNebular) ? 1 :
+			(end_of_selection && ((!mouse_any_stroke) || !(inter_awaiting == AWAITING_COMMAND))) ? 1 : 0;
 		break;
 
 	case STROKE_ACTION:
@@ -1109,7 +1091,8 @@ static void inter_select_word() {
 			paul_id = object[inven[active_inven]].vocab_id;
 			paul_id = object_named(paul_id);
 
-			if (paul_id == 8 && !global[86]) {  // pid doll / global [heal_verbs_visible]
+			if (g_engine->getGameID() == GType_Dragonsphere && paul_id == Dragonsphere::pid_doll &&
+					!global[Dragonsphere::heal_verbs_visible]) {
 				quantity = 1;
 			} else {
 				quantity = object[inven[active_inven]].num_verbs;
@@ -1120,14 +1103,15 @@ static void inter_select_word() {
 		} else {
 			quantity = 0;
 		}
+
 		strict = 0;
 		delta = 0;
 		selection = mouse_button ? &right_action : &left_action;
 		if (mouse_button && (right_command >= 0)) {
 			inter_set_active_word(STROKE_COMMAND, &right_command, -1);
 		}
-		// tight_boxes = end_of_selection && !mouse_button;
-		tight_boxes = true;
+
+		tight_boxes = (g_engine->getGameID() != GType_RexNebular) ? 1 : end_of_selection && !mouse_button ? 1 : 0;
 		break;
 
 	case STROKE_SPECIAL_INVEN:
@@ -1136,7 +1120,7 @@ static void inter_select_word() {
 		strict = 0;
 		delta = active_inven;
 		selection = &junk;
-		tight_boxes = true;
+		tight_boxes = -1;
 		break;
 
 	case STROKE_DIALOG:
@@ -1150,7 +1134,7 @@ static void inter_select_word() {
 		strict = 0;
 		delta = 0;
 		selection = &left_command;
-		tight_boxes = true;
+		tight_boxes = -1;
 		break;
 
 	case STROKE_INTERFACE:
@@ -1161,7 +1145,7 @@ static void inter_select_word() {
 		strict = 0;
 		delta = 0;
 		selection = &junk;
-		tight_boxes = true;
+		tight_boxes = -1;
 		break;
 	}
 
@@ -1174,11 +1158,6 @@ static void inter_select_word() {
 	for (count = 0; (count < quantity) && (new_ < 0); count++) {
 		if (stroke_type == STROKE_INTERFACE) {
 			this_spot = base_spot + (quantity - (count + 1));
-			// if (count >= difference) {
-			// this_spot = base_spot + (room_num_spots - ((count - difference) + 1));
-			// } else {
-			// this_spot = base_spot + room_num_spots + count;
-			// }
 		} else {
 			this_spot = base_spot + count;
 		}
@@ -1435,7 +1414,6 @@ static void inter_compile_sentence() {
 
 			inter_add_word_to_sentence(inter_verb, true);
 			if (inter_verb == words_look) {
-				// inter_prep = PREP_AT;
 				Common::strcat_s(inter_sentence, istring_prep_names[PREP_AT]);
 				Common::strcat_s(inter_sentence, istring_space);
 			}
@@ -1583,11 +1561,9 @@ static void inter_analyze_stroke() {
 	}
 
 	switch (inter_awaiting) {
-
 	case AWAITING_COMMAND:
 		inter_prep = PREP_NONE;
 		switch (stroke_type) {
-
 		case STROKE_COMMAND:
 			inter_command_source = STROKE_COMMAND;
 			inter_command = picked_word;
@@ -1698,10 +1674,8 @@ static void inter_complete_stroke() {
 	}
 
 	switch (inter_awaiting) {
-
 	case AWAITING_COMMAND:
 		switch (stroke_type) {
-
 		case STROKE_COMMAND:
 			if (inter_command >= 0) {
 				if (inter_verb_type == VERB_ONLY) {
@@ -1762,7 +1736,6 @@ static void inter_complete_stroke() {
 
 	case AWAITING_THIS:
 		switch (stroke_type) {
-
 		case STROKE_INVEN:
 		case STROKE_INTERFACE:
 		case STROKE_SPECIAL_INVEN:
@@ -1822,7 +1795,8 @@ static void inter_background_animation() {
 	int image_scan;
 	int myprob;
 
-	if (inter_anim == NULL) goto done;
+	if (inter_anim == NULL)
+		goto done;
 
 	inter_no_segments_active = !inter_some_segments_active;
 	inter_some_segments_active = false;
@@ -1876,11 +1850,6 @@ static void inter_background_animation() {
 				image_inter_list[image_inter_marker].flags = IMAGE_UPDATE;
 				image_inter_marker++;
 			}
-#ifndef disable_error_check
-			else {
-				error_report(ERROR_IMAGE_INTER_LIST_FULL, WARNING, MODULE_INTER, IMAGE_INTER_LIST_SIZE, 3);
-			}
-#endif
 		}
 	}
 
@@ -1913,11 +1882,6 @@ void inter_spinning_object() {
 			image_inter_list[image_inter_marker].y = inter_object_base_y;
 			image_inter_marker++;
 		}
-#ifndef disable_error_check
-		else {
-			error_report(ERROR_IMAGE_INTER_LIST_FULL, WARNING, MODULE_INTER, IMAGE_INTER_LIST_SIZE, 3);
-		}
-#endif
 	}
 
 done:
@@ -2169,6 +2133,10 @@ void inter_main_loop(int allow_input) {
 			matte_clear_message(inter_sentence_handle);
 			inter_sentence_handle = -1;
 		}
+		if (inter_sentence_shadow_handle >= 0) {
+			matte_clear_message(inter_sentence_shadow_handle);
+			inter_sentence_shadow_handle = -1;
+		}
 		if (g_engine->getGameID() != GType_Forest && (strlen(inter_sentence) > 0) &&
 				((inter_input_mode == INTER_BUILDING_SENTENCES) || (inter_input_mode == INTER_LIMITED_SENTENCES))) {
 			use_font = font_main;
@@ -2184,8 +2152,16 @@ void inter_main_loop(int allow_input) {
 			x = (video_x >> 1) - (width >> 1);
 			y = (viewing_at_y + scr_work.y - 1) - 12;
 
-			inter_sentence_handle = matte_add_message (use_font, inter_sentence, x, y,
-				g_engine->getGameID() == GType_RexNebular ? INTER_MESSAGE_COLOR_REX : INTER_MESSAGE_COLOR,
+			byte sentenceColor = g_engine->getGameID() == GType_RexNebular ?
+				INTER_MESSAGE_COLOR_REX : INTER_MESSAGE_COLOR;
+			byte shadowColor = 0;
+			if (g_engine->getInterfaceSentenceColors(sentenceColor, shadowColor)) {
+				inter_sentence_shadow_handle = matte_add_message(use_font,
+					inter_sentence, x + 1, y + 1, shadowColor,
+					use_spacing);
+			}
+			inter_sentence_handle = matte_add_message(use_font, inter_sentence, x, y,
+				sentenceColor,
 				use_spacing);
 		}
 		inter_sentence_changed = false;
@@ -2201,8 +2177,10 @@ void inter_main_loop(int allow_input) {
 				image_inter_list[count].flags = IMAGE_ERASE;
 			}
 		}
-		inter_background_animation();
-		inter_spinning_object();
+		if (g_engine->hasInterfaceAnimations()) {
+			inter_background_animation();
+			inter_spinning_object();
+		}
 		inter_base_time = now_time + 6;
 	}
 }

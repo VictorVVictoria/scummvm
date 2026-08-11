@@ -35,7 +35,7 @@
 #include "mads/core/text.h"
 #include "mads/phantom/phantom.h"
 #include "mads/phantom/main.h"
-#include "mads/phantom/sound_phantom.h"
+#include "mads/phantom/sound/sound.h"
 #include "mads/phantom/catacombs.h"
 #include "mads/phantom/global.h"
 #include "mads/phantom/rooms/section1.h"
@@ -63,7 +63,7 @@ Common::Error PhantomEngine::run() {
 	}
 
 	// Set up sound manager
-	_soundManager = new PhantomSoundManager(_mixer, _soundFlag, isDemo());
+	_soundManager = new Sound::PhantomSoundManager(_mixer, _soundFlag, isDemo());
 	_soundManager->validate();
 
 	// Run the game
@@ -162,13 +162,6 @@ void PhantomEngine::global_init_code() {
 	himem_preload_series("*RTK_6", GLOBAL);
 	himem_preload_series("*RTK_9", GLOBAL);
 	himem_preload_series("*RALRH_9", GLOBAL);
-
-	if (g_engine->isDemo()) {
-		inter_move_object(key, PLAYER);
-		inter_move_object(lantern, PLAYER);
-		inter_move_object(small_note, PLAYER);
-		inter_move_object(rope, PLAYER);
-	}
 }
 
 void PhantomEngine::section_music(int section_num) {
@@ -657,7 +650,6 @@ void PhantomEngine::global_parser_code() {
 			inter_move_object(rope, NOWHERE);
 			inter_give_to_player(rope_with_hook);
 			object_examine(rope_with_hook, text_008_23, 0);
-			/* text_show (text_008_23); */
 		}
 		goto handled;
 	}

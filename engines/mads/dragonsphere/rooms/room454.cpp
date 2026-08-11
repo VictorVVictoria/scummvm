@@ -205,14 +205,10 @@ static void set_454_cloud_right_position() {
 }
 
 static void handle_animation_king() {
-	int king_reset_frame;
-
 	if (kernel_anim[aa[0]].frame != local->king_frame) {
 		local->king_frame = kernel_anim[aa[0]].frame;
-		king_reset_frame = -1;
 
 		switch (local->king_frame) {
-
 		case 210:
 			camera_pan_to(&camera_x, 0);
 			break;
@@ -223,11 +219,6 @@ static void handle_animation_king() {
 			global[no_load_walker] = false;
 			new_room               = 405;
 			break;
-		}
-
-		if (king_reset_frame >= 0) {
-			kernel_reset_animation(aa[0], king_reset_frame);
-			local->king_frame = king_reset_frame;
 		}
 	}
 }

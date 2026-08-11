@@ -221,7 +221,6 @@ static void handle_animation_water() {
 		water_reset_frame = -1;
 
 		switch (local->water_frame) {
-
 		case 39:  /* end of steam at left screen */
 			camera_pan_to(&camera_x, 320);
 			break;
@@ -258,9 +257,6 @@ static void room_613_daemon() {
 		break;
 
 	case 10:
-		/* if (game.difficulty == EASY_MODE) { */
-		  /* text_show (61316); */
-		/* } */
 		player.x = local->old_x;
 		player.y = local->old_y;
 		new_room = 606;

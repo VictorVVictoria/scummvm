@@ -590,7 +590,6 @@ static void handle_animation_a_macmorn() {
 		a_mac_reset_frame = -1;
 
 		switch (local->a_mac_frame) {
-
 		case 114:
 			/* just when MacMorn and queen leave bottom of screen */
 			new_room = 614;
@@ -702,13 +701,11 @@ static void handle_animation_a_queen() {
 			case QUEEN_TALK:
 				a_q_reset_frame = 3;
 				local->a_q_action = QUEEN_SHUT_UP;
-				/* local->a_q_talk_count = 100; */
 				break;
 
 			case QUEEN_FIST:
 				a_q_reset_frame = 20;
 				local->a_q_action = QUEEN_SHUT_UP;
-				/* local->a_q_talk_count = 100; */
 				break;
 
 			case QUEEN_SHUT_UP:
@@ -730,7 +727,6 @@ static void handle_animation_a_queen() {
 			case QUEEN_GET_UP:
 				a_q_reset_frame = 37;
 				local->a_q_action = QUEEN_SHUT_UP;
-				/* local->a_q_talk_count = 100; */
 				break;
 			}
 			break;
@@ -1169,7 +1165,7 @@ static void room_106_parser() {
 	if (player_said_2(walk_through, door_to_meeting_room) || player_said_2(open, door_to_meeting_room) ||
 		player_said_2(pull, door_to_meeting_room)) {
 		if (g_engine->isDemo()) {
-			popup_alert(24, DEMO_MSG, nullptr);
+			text_show(999);
 			goto handled;
 		}
 
@@ -1239,7 +1235,7 @@ static void room_106_parser() {
 	if (player_said_2(walk_through, door_to_ballroom) || player_said_2(open, door_to_ballroom) ||
 		player_said_2(pull, door_to_ballroom)) {
 		if (g_engine->isDemo()) {
-			popup_alert(24, DEMO_MSG, nullptr);
+			text_show(999);
 			goto handled;
 		}
 
@@ -1309,7 +1305,7 @@ static void room_106_parser() {
 	if (player_said_2(walk_through, door_to_council_room) || player_said_2(open, door_to_council_room) ||
 		player_said_2(pull, door_to_council_room)) {
 		if (g_engine->isDemo()) {
-			popup_alert(24, DEMO_MSG, nullptr);
+			text_show(999);
 			goto handled;
 		}
 

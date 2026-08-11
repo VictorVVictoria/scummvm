@@ -306,7 +306,6 @@ int himem_preload(char *filename, int level) {
 			if (ems_copy_it_up(new_handle, &page_marker, &page_offset, load_buf, read_size)) goto done;
 		} else {
 
-			// printf ("Record %d (Size: %ld, Offset: %ld)\n", count, read_size, xms_offset);
 			if (xms_copy(read_size,
 				MEM_CONV, load_buf,
 				xms_handle, (XMS)xms_offset)) goto done;
@@ -329,14 +328,6 @@ int himem_preload(char *filename, int level) {
 	mads_strlwr(himem_directory_entry->list);
 
 	preload_handle = new_handle;
-
-#ifndef disable_statistics
-	if (memory_type == MEM_EMS) {
-		himem_ems_preloaded++;
-	} else {
-		himem_xms_preloaded++;
-	}
-#endif
 
 done:
 	if (load_buf != NULL) mem_free(load_buf);
@@ -615,14 +606,6 @@ int himem_preload_series(const char *fname, int level) {
 	mads_strlwr(himem_directory_entry->list);
 
 	preload_handle = new_handle;
-
-#ifndef disable_statistics
-	if (memory_type == MEM_EMS) {
-		himem_ems_preloaded++;
-	} else {
-		himem_xms_preloaded++;
-	}
-#endif
 
 done:
 	if (decompress_buffer != NULL) mem_free(decompress_buffer);

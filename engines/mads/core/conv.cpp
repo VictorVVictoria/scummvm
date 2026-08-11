@@ -1179,6 +1179,7 @@ void conv_system_init() {
 
 void conv_system_cleanup() {
 	delete savedConv;
+	savedConv = nullptr;
 }
 
 
@@ -1412,7 +1413,7 @@ done:
 // engine has a pending player command ready (mirrors player.command_ready in
 // the callers for modes 1 and 2).
 //
-// Status dispatch table (off_2D438):
+// Status dispatch table:
 //   0  (NEXT_NODE)   — advance to next node or build player menu
 //   1  (WAIT_AUTO)   — wait for auto-trigger then advance to EXECUTE
 //   2  (WAIT_ENTRY)  — player chose an option; execute it + show NPC portrait
@@ -1431,7 +1432,6 @@ void conv_update(bool flag) {
 	ConvData *my_conv_data = conv_data[slot];
 
 	switch (conv_control.status) {
-
 	// ------------------------------------------------------------------
 	// Mode 0 — NEXT_NODE
 	// ------------------------------------------------------------------
@@ -1788,6 +1788,7 @@ int conv_expand(Common::SeekableReadStream *handle) {
 	int count;
 	int16 list[CONV_MAX_SLOTS];
 	ConvData *convData;
+	bool success = true;
 
 	Common::fill(conv_indexes, conv_indexes + CONV_MAX_SLOTS, 0);
 
@@ -1796,7 +1797,7 @@ int conv_expand(Common::SeekableReadStream *handle) {
 	for (int i = 0; i < count; ++i)
 		list[i] = handle->readSint16LE();
 
-	for (int i = 0; i < count; ++i) {
+	for (int i = 0; i < count && success; ++i) {
 		int index = list[i];
 		conv_indexes[index] = 1;
 
@@ -1809,14 +1810,11 @@ int conv_expand(Common::SeekableReadStream *handle) {
 		convData = conv_read(handle);
 
 		// Write it out to the temporary file
-		bool success = false;
+		success = false;
 		if (convData)
 			success = !conv_write(dest, convData);
 
-		if (!success) {
-			delete convData;
-			break;
-		}
+		delete convData;
 	}
 
 	return 0;

@@ -43,6 +43,7 @@
 #include "mads/core/keys.h"
 #include "mads/core/pack.h"
 #include "mads/core/room.h"
+#include "mads/core/sound.h"
 #include "mads/core/xms.h"
 #include "mads/core/tile.h"
 #include "mads/core/popup.h"
@@ -57,7 +58,7 @@
 #include "mads/core/quote.h"
 #include "mads/core/game.h"
 #include "mads/core/imath.h"
-#include "mads/forest/digi.h"
+#include "mads/forest/sound/digi.h"
 #include "mads/nebular/extra.h"
 
 namespace MADS {
@@ -170,10 +171,6 @@ int kernel_load_vocab() {
 	int error_flag;
 	int count;
 	int count2;
-#ifdef log_vocab
-	FILE *handle;
-	long before, after;
-#endif
 
 	// Load all main command verbs
 	for (count = 0; count < INTER_COMMANDS; count++) {
@@ -197,21 +194,7 @@ int kernel_load_vocab() {
 		}
 	}
 
-#ifdef log_vocab
-	before = mem_get_avail();
-#endif
-
 	error_flag = vocab_load_active();
-
-#ifdef log_vocab
-	after = mem_get_avail();
-	if (fileio_exist("vocab.log")) {
-		handle = fopen("vocab.log", "wt");
-		fprintf(handle, "Room %d   Vocab words: %d    Memory: %ld\n",
-			room_id, vocab_active, before - after);
-		fclose(handle);
-	}
-#endif
 
 	return error_flag;
 }
@@ -233,7 +216,6 @@ void kernel_game_shutdown() {
 	pack_set_special_buffer(NULL, NULL);
 
 	object_unload();
-	// inter_deallocate_objects();
 	popup_available = false;
 
 	// Remove special keyboard handler
@@ -294,10 +276,6 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 	int pages;
 	int reserve[EMS_PAGING_CLASSES];
 	byte *interrupt_stack;
-
-#ifndef disable_error_check
-	int error_code = 0;
-#endif
 
 	// Set up EMS/XMS paging system, if any
 	himem_startup();
@@ -366,9 +344,6 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 		buffer_init_name(&scr_main, video_x, video_y, "$scrmain");
 	}
 	if (scr_main.data == NULL) {
-#ifndef disable_error_check
-		error_code = ERROR_NO_MORE_MEMORY;
-#endif
 		goto done;
 	}
 
@@ -383,26 +358,27 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 
 	// Load the main interface fonts
 	if (load_flag & KERNEL_STARTUP_FONT) {
+		const bool isRexDemo = g_engine->getGameID() == GType_RexNebular && g_engine->isDemo();
+
 		font_main = font_load("*FONTMAIN.FF");
 		font_inter = font_load("*FONTINTR.FF");
 		font_conv = font_load("*FONTCONV.FF");
-		font_misc = font_load("*FONTMISC.FF");
+		font_misc = isRexDemo ? nullptr : font_load("*FONTMISC.FF");
 
 		font_menu = font_tele = nullptr;
 
 		if (g_engine->getGameID() == GType_RexNebular) {
-			font_tele = font_load("*FONTTELE.FF");
+			if (!isRexDemo)
+				font_tele = font_load("*FONTTELE.FF");
 			box_param.font = font_inter;
 		} else {
 			font_menu = font_load("*FONTMENU.FF");
 		}
 
-		if ((font_main == NULL) || (font_inter == NULL) || (font_conv == NULL) || (font_misc == NULL) ||
-			(g_engine->getGameID() != GType_RexNebular && font_menu == NULL) ||
-			(g_engine->getGameID() == GType_RexNebular && font_tele == NULL)) {
-#ifndef disable_error_check
-			error_code = ERROR_KERNEL_NO_FONTS;
-#endif
+		if ((font_main == NULL) || (font_inter == NULL) || (font_conv == NULL) ||
+				(!isRexDemo && font_misc == NULL) ||
+				(g_engine->getGameID() != GType_RexNebular && font_menu == NULL) ||
+				(g_engine->getGameID() == GType_RexNebular && !isRexDemo && font_tele == NULL)) {
 			goto done;
 		}
 	}
@@ -420,9 +396,6 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 	// Load the objects list
 	if (load_flag & KERNEL_STARTUP_OBJECTS) {
 		if (object_load()) {
-#ifndef disable_error_check
-			error_code = ERROR_KERNEL_NO_OBJECTS;
-#endif
 			goto done;
 		}
 		if (inven_num_objects > 0) {
@@ -450,12 +423,20 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 			mcga_setpal_range(&master_palette, 0, 4);
 		}
 
-		// Load cursor sprite series
-		cursor = sprite_series_load("*CURSOR.SS", PAL_MAP_RESERVED);
+		// The Macintosh release exposes native system cursors without a MADS
+		// sprite series. Keep a lightweight header so the shared cursor-selection
+		// logic can retain its existing range checks.
+		const int nativeCursorCount = env_get_cursor_count();
+		if (nativeCursorCount > 0) {
+			cursor = (SeriesPtr)mem_get_name(sizeof(Series), "CURSOR");
+			if (cursor) {
+				memset(cursor, 0, sizeof(Series));
+				cursor->num_sprites = nativeCursorCount;
+			}
+		} else {
+			cursor = sprite_series_load("*CURSOR.SS", PAL_MAP_RESERVED);
+		}
 		if (cursor == NULL) {
-#ifndef disable_error_check
-			error_code = ERROR_KERNEL_NO_CURSOR;
-#endif
 			goto done;
 		}
 
@@ -470,7 +451,6 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 
 	if (load_flag & KERNEL_STARTUP_POPUP && g_engine->getGameID() != GType_RexNebular) {
 		if (popup_box_load()) {
-			error_code = ERROR_KERNEL_NO_POPUP;
 			goto done;
 		}
 	}
@@ -485,10 +465,6 @@ done:
 		mouse_show();
 
 	if (error_flag) {
-#ifndef disable_error_check
-		error_check_memory();
-		error_report(error_code, ERROR, MODULE_KERNEL, 0, 0);
-#endif
 		kernel_game_shutdown();
 	}
 
@@ -516,7 +492,6 @@ void kernel_room_shutdown() {
 	if (inter_anim) {
 		anim_unload((AnimPtr)inter_anim);
 		buffer_free(&scr_inter_orig);
-		mem_free(inter_anim);
 		inter_anim = nullptr;
 	} else if (scr_inter_orig.data) {
 		buffer_free(&scr_inter_orig);
@@ -548,10 +523,6 @@ int kernel_room_startup(int newRoom, int initial_variant, const char *interface,
 		bool new_palette, bool barebones) {
 	int error_flag = true;
 	int load_flags;
-#ifndef disable_error_check
-	int error_code = 0;
-	int error_data = 0;
-#endif
 
 	// Make a note of the new room number & variant
 	previous_room = room_id;
@@ -568,7 +539,6 @@ int kernel_room_startup(int newRoom, int initial_variant, const char *interface,
 
 	// Load up popup box frame
 	if (g_engine->getGameID() == GType_Phantom && popup_box_load()) {
-		error_code = ERROR_KERNEL_NO_POPUP;
 		goto done;
 	}
 
@@ -599,10 +569,6 @@ int kernel_room_startup(int newRoom, int initial_variant, const char *interface,
 		-1,
 		load_flags);
 	if (room == NULL) {
-#ifndef disable_error_check
-		error_data = room_load_error;
-		error_code = ERROR_KERNEL_NO_ROOM;
-#endif
 		goto done;
 	}
 
@@ -642,9 +608,6 @@ int kernel_room_startup(int newRoom, int initial_variant, const char *interface,
 	// Load up the room's hotspot table
 	room_spots = room_load_hotspots(room_id, &room_num_spots);
 	if (room_spots == NULL) {
-#ifndef disable_error_check
-		error_code = ERROR_KERNEL_NO_HOTSPOTS;
-#endif
 		goto done;
 	}
 
@@ -665,7 +628,7 @@ int kernel_room_startup(int newRoom, int initial_variant, const char *interface,
 
 		pal_activate_shadow(&kernel_shadow_main);
 
-		if (!inter_anim->font) {
+		if (g_engine->getGameID() == GType_Phantom && !inter_anim->font) {
 			mem_free(inter_anim);
 			inter_anim = nullptr;
 		}
@@ -684,10 +647,6 @@ finish:
 
 done:
 	if (error_flag) {
-#ifndef disable_error_check
-		error_check_memory();
-		error_report(error_code, ERROR, MODULE_KERNEL, room_id, error_data);
-#endif
 		kernel_room_shutdown();
 	}
 	return error_flag;
@@ -709,13 +668,6 @@ int kernel_load_series(const char *name, int load_flags) {
 	if (kernel.translating) load_flags |= SPRITE_LOAD_TRANSLATE;
 
 	handle = matte_load_series(name, load_flags, 0);
-
-	if ((handle < 0) && !kernel_ok_to_fail_load) {
-#ifndef disable_error_check
-		Common::strcpy_s(error_string, name);
-		error_report(ERROR_SERIES_LOAD_FAILED, WARNING, MODULE_KERNEL, handle, sprite_error);
-#endif
-	}
 
 	return handle;
 }
@@ -771,9 +723,6 @@ int kernel_seq_add(int series_id, int mirror, int initial_sprite,
 	}
 
 	if (!found) {
-#if !defined(disable_error_check)
-		error_report(ERROR_SEQUENCE_LIST_FULL, WARNING, MODULE_KERNEL, KERNEL_MAX_SEQUENCES, 0);
-#endif
 		goto done;
 	}
 
@@ -1074,9 +1023,6 @@ int kernel_timing_trigger(int ticks, int trigger_code) {
 	}
 
 	if (!found) {
-#if !defined(disable_error_check)
-		error_report(ERROR_SEQUENCE_LIST_FULL, WARNING, MODULE_KERNEL, KERNEL_MAX_SEQUENCES, 0);
-#endif
 		goto done;
 	}
 
@@ -1514,11 +1460,8 @@ int kernel_run_animation(const char *name, int trigger_code) {
 
 done:
 	if (error_flag) {
-		if (found >= 0) kernel_abort_animation(found);
-#ifndef disable_error_check
-		Common::strcpy_s(error_string, name);
-		error_report(ERROR_KERNEL_NO_ANIMATION, WARNING, MODULE_KERNEL, trigger_code, anim_error);
-#endif
+		if (found >= 0)
+			kernel_abort_animation(found);
 	}
 
 	anim_error = 0;
@@ -1716,8 +1659,8 @@ static void kernel_process_animation(int handle, int asynchronous) {
 	}
 
 	if (!asynchronous) {
-		if (kernel_anim[handle].anim->frame[kernel_anim[handle].frame].sound) {
-			// pl sound_play(kernel_anim[handle].anim->frame[kernel_anim[handle].frame].sound);
+		if (g_engine->getGameID() != GType_Forest && kernel_anim[handle].anim->frame[kernel_anim[handle].frame].sound) {
+			sound_play(kernel_anim[handle].anim->frame[kernel_anim[handle].frame].sound);
 		}
 
 		if ((kernel_anim[handle].anim->misc_peel_x != 0) || (kernel_anim[handle].anim->misc_peel_y != 0)) {

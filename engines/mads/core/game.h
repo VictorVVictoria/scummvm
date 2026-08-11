@@ -25,10 +25,14 @@
 #include "common/serializer.h"
 #include "mads/core/general.h"
 #include "mads/core/global.h"
+#include "mads/core/kernel.h"
+#include "mads/core/object.h"
 #include "mads/core/player.h"
+#include "mads/core/quote.h"
 #include "mads/core/mads.h"
 #include "mads/core/heap.h"
 #include "mads/core/popup.h"
+#include "mads/core/text.h"
 
 namespace MADS {
 
@@ -104,8 +108,6 @@ extern int selected_intro;
 
 #define EXTRA_MAX_INV_OBJECTS 18   /* 16, + background, + open backpack */
 
-/* int inven_ss[EXTRA_MAX_INV_OBJECTS]; */
-/* int inven_seq[EXTRA_MAX_INV_OBJECTS]; */
 
 
 /* Declared by Taranjeet for OUAF Journal */
@@ -276,6 +278,11 @@ extern void show_logo();
 extern void show_version();
 
 extern void init_game();
+
+/**
+ * Returns a pointer to a savegame slot in the savegame directory list
+ */
+extern char *game_menu_save_string(int id);
 
 } // namespace MADS
 

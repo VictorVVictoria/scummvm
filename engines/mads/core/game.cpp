@@ -62,9 +62,10 @@
 #include "mads/core/text.h"
 #include "mads/core/imath.h"
 #include "mads/core/screen.h"
-#include "mads/forest/digi.h"
+#include "mads/forest/sound/digi.h"
 #include "mads/forest/extra.h"
 #include "mads/forest/global.h"
+#include "mads/nebular/global.h"
 
 namespace MADS {
 
@@ -308,6 +309,7 @@ void flag_parse(const char **myscan) {
 	case 'M':
 		if (scan_past(myscan, ':')) {
 			mem_max = atol(*myscan);
+			(void)mem_max;
 			scan_past(myscan, 0);
 		}
 		break;
@@ -1031,7 +1033,6 @@ int game_parse_keystroke(int mykey) {
 
 	case ctrl_k_key:
 		inter_report_hotspots = !inter_report_hotspots;
-		// config_file.interface_hotspots = inter_report_hotspots ? INTERFACE_BRAINDEAD : INTERFACE_MACINTOSH;
 		inter_init_sentence();
 		break;
 
@@ -1160,16 +1161,8 @@ void game_control() {
 
 	} else if (!game_restore_flag) {
 		result = main_copy_verify();
-		if (result == COPY_FAIL) {
-			game.going = false;
-			force_chain = true;
-			game_restore_flag = false;
+		if (!game.going)
 			return;
-			
-		} else if (result == COPY_ESCAPE) {
-			game.going = false;
-			force_chain = true;
-		}
 	}
 
 	kernel.clock = timer_read();
@@ -1265,12 +1258,10 @@ void game_control() {
 				g_engine->getGameID() == GType_RexNebular || !player.walker_is_loaded);
 
 			quote_emergency = false;
-			// vocab_emergency = false;
 			game_wait_cursor();
 
 			kernel.quotes = NULL;
 
-			// vocab_init_active();
 			kernel_init_dynamic();
 
 			game_exec_function(section_room_constructor);
@@ -1499,6 +1490,17 @@ void game_control() {
 			// Flush all EMS/XMS preloads at the room level
 			himem_flush(ROOM);
 
+			// Rex Nebular menu display
+			if (g_engine->getGameID() == GType_RexNebular && kernel.activate_menu != GAME_NO_MENU &&
+					player.commands_allowed && !global[RexNebular::kCopyProtectFailed]) {
+				player_dump_walker();
+
+				g_engine->setSavegameThumbnail();
+				game_exec_function(game_menu_routine);
+				g_engine->clearSavegameThumbnail();
+				kernel.activate_menu = GAME_NO_MENU;
+			}
+
 			if (!game.going && !win_status) {
 				conv_control.running = aborted_conv;
 
@@ -1535,7 +1537,7 @@ void game_control() {
 
 	kernel_game_shutdown();
 
-	// pl conv_system_cleanup();
+	conv_system_cleanup();
 	mcga_reset();
 }
 
@@ -1925,16 +1927,26 @@ static void game_control_loop() {
 	if (debugger) game_exec_function(debugger_reset);
 
 	while ((new_room == room_id) && game.going && !kernel.force_restart) {
-
 		game_main_loop();
 
 		if (kernel.activate_menu) {
 			if (!kernel.trigger && player.commands_allowed) {
-				game_exec_function(game_menu_routine);
+				if (g_engine->getGameID() == GType_RexNebular) {
+					// Rex handles menus after completely unloading the current room.
+					// DOS uses virtual menu rooms; for now, Macintosh dispatches to
+					// its own ScummVM-dialog adapter through the same game callback.
+					kernel.force_restart = true;
 
-				if (game_menu_routine == NULL) game.going = false;
+				} else {
+					g_engine->setSavegameThumbnail();
+					game_exec_function(game_menu_routine);
+					g_engine->clearSavegameThumbnail();
 
-				kernel.activate_menu = GAME_NO_MENU;
+					if (game_menu_routine == NULL)
+						game.going = false;
+
+					kernel.activate_menu = GAME_NO_MENU;
+				}
 			}
 		}
 
@@ -1958,6 +1970,11 @@ void chain_execute() {
 	error("TODO: chain_execute");
 }
 
+
+char *game_menu_save_string(int id) {
+	return game_save_directory + (id * (GAME_MAX_SAVE_LENGTH + 1));
+}
+
 /**
  * Reads the list of save files.
  */
@@ -1967,7 +1984,7 @@ static void game_read_save_directory() {
 
 	for (auto it = list.begin(); it != list.end(); ++it) {
 		if (it->getSaveSlot() > 0) {
-			char *slot = game_save_directory + (it->getSaveSlot() - 1) * (GAME_MAX_SAVE_LENGTH + 1);
+			char *slot = game_menu_save_string(it->getSaveSlot() - 1);
 			Common::strcpy_s(slot, GAME_MAX_SAVE_LENGTH + 1, it->getDescription().c_str());
 		}
 	}
@@ -2049,8 +2066,6 @@ done:
 }
 
 void game_debugger_reset() {
-	//screen = mono_text_video;
-
 	screen_normal_color = colorbyte(hi_white, black);
 	screen_hilite_color = screen_normal_color + 128;
 
@@ -2071,7 +2086,6 @@ static void game_main_update() {
 	screen_printf(0, 2, "%-3d, %-3d Mem: %-6ld Min: %-6ld", room_id, previous_room, mem_get_avail(), mem_min_free);
 
 	screen_printf(0, 4, "%s @ %3d, %3d Dpt: %d   ", player.series_name, player.x, player.y, player.depth);
-	// screen_printf (0, 5, "        Series: %d   Sprite: %-2d   Mirror: %-2d   Frame Rate: %d    ", player.series, player.sprite, player.mirror, player.frame_delay);
 	screen_printf(0, 7, "Sc: %-3d  Fr %d => %d%, Bk %d => %d%", player.scale, room->front_y, room->front_scale, room->back_y, room->back_scale);
 
 	if (!player.walker_visible) {
@@ -2229,8 +2243,6 @@ static void game_palette_update() {
 			delta = old_free - free;
 		}
 
-		// screen_printf (0, 22, "Free: %-3d", free);
-		// screen_printf (0, 23, "Previous: %-3d", old_free);
 		screen_printf(0, 24, "Added: %-3d", delta);
 
 
@@ -2422,29 +2434,30 @@ static void game_matte() {
 		if (count < image_max) {
 			switch (image_list[count].flags) {
 			case IMAGE_UPDATE:
-				// Common::strcpy_s (flags_buf, "Update");
+				Common::strcpy_s (flags_buf, "Update");
 				break;
 
 			case IMAGE_STATIC:
-				// Common::strcpy_s (flags_buf, "Static");
+				Common::strcpy_s (flags_buf, "Static");
 				break;
 
 			case IMAGE_ERASE:
-				// Common::strcpy_s (flags_buf, "Erase");
+				Common::strcpy_s (flags_buf, "Erase");
 				break;
 
 			case IMAGE_REFRESH:
-				// Common::strcpy_s (flags_buf, "Refresh");
+				Common::strcpy_s (flags_buf, "Refresh");
 				break;
 
 			case IMAGE_DELTA:
-				// Common::strcpy_s (flags_buf, "Delta");
+				Common::strcpy_s (flags_buf, "Delta");
 				break;
 
 			default:
 				Common::sprintf_s(flags_buf, "(%d)", image_list[count].flags);
 				break;
 			}
+
 			if (image_list[count].flags != IMAGE_REFRESH) {
 				series_id = image_list[count].series_id;
 				Common::strcpy_s(name_buf, series_name[series_id]);

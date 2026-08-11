@@ -109,6 +109,10 @@ DirectorEngine::DirectorEngine(OSystem *syst, const DirectorGameDescription *gam
 	_fileIOType = 0;
 	_vfwPaletteHack = false;
 
+	_key = 0;
+	_keyCode = 0;
+	_keyFlags = 0;
+
 	_wm = nullptr;
 
 	_gameDataDir = Common::FSNode(ConfMan.getPath("path"));
@@ -233,10 +237,10 @@ bool DirectorEngine::isWindowRegistered(Window *window) const {
 void DirectorEngine::setCurrentWindow(Window *window) {
 	if (_currentWindow == window)
 		return;
+	window->incRefCount();
 	if (_currentWindow)
 		_currentWindow->decRefCount();
 	_currentWindow = window;
-	_currentWindow->incRefCount();
 }
 
 void DirectorEngine::setVersion(uint16 version) {
